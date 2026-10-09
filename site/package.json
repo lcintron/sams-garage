@@ -1,0 +1,5 @@
+{
+  "//": "Marks site/ JavaScript as ES modules for node --test. Not used by the browser.",
+  "type": "module",
+  "private": true
+}

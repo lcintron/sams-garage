@@ -1,0 +1,15 @@
+{
+  "name": "sbir-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static PWA that lists every open and upcoming U.S. federal SBIR/STTR topic, refreshed daily by GitHub Actions.",
+  "license": "MIT",
+  "scripts": {
+    "serve": "node serve.js 8091",
+    "build": "python -m scraper build --out site/data",
+    "scrape": "python -m scraper scrape --all",
+    "scrape:quick": "python -m scraper scrape --all --limit 40",
+    "test": "node --test \"site/tests/*.test.mjs\"",
+    "dev": "npm run scrape:quick && npm run build && npm run serve"
+  }
+}

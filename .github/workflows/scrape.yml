@@ -1,0 +1,123 @@
+name: Scrape and deploy
+
+# Daily data refresh: scrape every source, commit the updated database in data/, then build the site
+# data from that exact commit and deploy GitHub Pages.
+#   * One failed source is a warning (recorded in data/meta.json); the job fails only when all fail.
+#   * "Nothing changed" is not an error, and the site is redeployed anyway so meta.json's build time
+#     stays fresh.
+#   * The push uses GITHUB_TOKEN, which does not trigger pages.yml, so there is no double deploy.
+# Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
+on:
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Per-source record cap (debug; empty = no cap)
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    name: Scrape sources and commit data
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Scrape
+        # The dispatch input reaches the shell only through an env var and is allowlisted here.
+        env:
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          args=(scrape --all --workers 6 --delay 0.2)
+          if [ -n "$LIMIT" ]; then
+            if [[ ! "$LIMIT" =~ ^[1-9][0-9]{0,4}$ ]]; then
+              echo "::error::limit must be a positive integer (got '$LIMIT')."
+              exit 1
+            fi
+            args+=(--limit "$LIMIT")
+          fi
+          python -m scraper "${args[@]}"
+      - name: Validate
+        run: python -m scraper validate
+      - name: Commit and push data
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            message=$(python -c 'import json; m = json.load(open("data/meta.json", encoding="utf-8")); print("data: refresh {} ({} open, {} new)".format(m["last_run"][:10], m["counts"]["by_status"].get("open", 0), m["last_run_events"]["new"]))')
+            git commit -m "$message"
+            # Rebase onto anything pushed while we were scraping, then push.
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Summary
+        if: always()
+        run: python -m scraper status >> "$GITHUB_STEP_SUMMARY" || true
+
+  build-deploy:
+    name: Build site data and deploy Pages
+    needs: scrape
+    if: always() && needs.scrape.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.scrape.outputs.sha }}   # the commit the scrape job just pushed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Build site data
+        run: python -m scraper build --out site/data
+      - name: Drop development-only files from the Pages artifact
+        # The checkout is throwaway; the repository keeps these files.
+        run: rm -rf site/tests site/icons/make-icons.py site/package.json
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5

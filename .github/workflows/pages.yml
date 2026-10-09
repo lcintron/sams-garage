@@ -1,0 +1,54 @@
+name: Deploy site
+
+# Rebuild site/data from the committed database and redeploy GitHub Pages whenever the site, the
+# scraper or the data changes on main (no scraping here; scrape.yml does that daily).
+# Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'scraper/**'
+      - 'data/**'
+      - 'requirements.txt'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-deploy:
+    name: Build site data and deploy Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Build site data
+        run: python -m scraper build --out site/data
+      - name: Drop development-only files from the Pages artifact
+        # The checkout is throwaway; the repository keeps these files.
+        run: rm -rf site/tests site/icons/make-icons.py site/package.json
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,1 @@
+sql.js 1.13.0 (npm), dist/sql-wasm.js + dist/sql-wasm.wasm

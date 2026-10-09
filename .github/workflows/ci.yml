@@ -1,0 +1,48 @@
+name: CI
+
+# Offline checks on every push and pull request: scraper unit tests (saved fixtures, no network),
+# a schema check and a build smoke test of the committed database, and the site's node tests.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Scraper tests and build smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pytest
+        run: pytest -q
+      - name: Validate committed data
+        run: python -m scraper validate
+      - name: Build smoke test
+        run: python -m scraper build --out "$RUNNER_TEMP/site-data"
+
+  node:
+    name: Site tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false   # no lock file and no dependencies
+      - name: node --test
+        run: npm test

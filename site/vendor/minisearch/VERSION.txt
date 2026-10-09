@@ -1,0 +1,1 @@
+minisearch 7.2.0 (npm), file dist/es/index.js renamed to minisearch.js; source map reference stripped

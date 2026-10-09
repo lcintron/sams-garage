@@ -1,0 +1,8 @@
+# Normalize text to LF everywhere (the data/*.jsonl database is diffed line by line).
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.ico binary
+*.wasm binary
+*.sqlite binary

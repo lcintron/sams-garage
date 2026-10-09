@@ -1,0 +1,53 @@
+{
+  "counts": {
+    "by_agency": {
+      "DOD": 73,
+      "EPA": 4,
+      "HHS": 18,
+      "NSF": 268,
+      "USDA": 1
+    },
+    "by_status": {
+      "forecasted": 7,
+      "open": 328,
+      "pre_release": 29
+    },
+    "total": 364
+  },
+  "last_run": "2026-10-09T17:26:47Z",
+  "last_run_events": {
+    "missing": 0,
+    "new": 0,
+    "status": 0,
+    "updated": 0
+  },
+  "sources": {
+    "dod_dsip": {
+      "complete": true,
+      "error": null,
+      "failed": 0,
+      "fetched": 73,
+      "ok": true,
+      "ran_at": "2026-10-09T17:28:32Z",
+      "records": 73
+    },
+    "grants_gov": {
+      "complete": true,
+      "error": null,
+      "failed": 0,
+      "fetched": 12,
+      "ok": true,
+      "ran_at": "2026-10-09T17:28:48Z",
+      "records": 12
+    },
+    "sbir_gov": {
+      "complete": true,
+      "error": null,
+      "failed": 0,
+      "fetched": 352,
+      "ok": true,
+      "ran_at": "2026-10-09T17:26:47Z",
+      "records": 352
+    }
+  }
+}
