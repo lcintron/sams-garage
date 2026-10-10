@@ -8,10 +8,13 @@
  *   2. else the copy kept from the last good answer
  *   3. else the snapshot bundled with the app (site/data/, built when the installer was made)
  * An answer is good only when it looks like what was asked for (JSON that parses, a SQLite file, never an HTML
- * page such as a captive portal's or an error page), so nothing else is ever kept or served as data. The live data
- * is used only while its format (meta.json "format") is one this app reads; when the site has moved on to a newer
- * format, an older install keeps using its copies, and the page, which still gets the live meta.json, asks for an
- * update.
+ * page such as a captive portal's or an error page), so nothing else is ever kept or served as data. Live data is
+ * used only when it is known to be in a format this app reads (meta.json "format"), checked against the live
+ * meta.json every time, never remembered across deploys: a file without a version (catalog.json, ...) is accepted
+ * only if the meta.json fetched right after it declares a readable format, and a versioned file (?v=<data_version>:
+ * records, the .sqlite file) only if that data_version came with a readable format. When the site has moved on to a
+ * newer format, an older install keeps using its copies, and the page, which still gets the live meta.json, asks
+ * for an update.
  *
  * No Electron imports here: main.js passes net.fetch in, and the tests run this module in plain Node. */
 const fs = require('fs');
@@ -24,7 +27,6 @@ const ORIGIN = `${SCHEME}://${HOST}`;
 const APP_PAGE = `${ORIGIN}/index.html`;
 // The site data format this app reads: scraper/build.py SITE_FORMAT, site/js/data.js DATA_FORMAT (tested to match).
 const DATA_FORMAT = 1;
-const FORMAT_TTL_MS = 10 * 60000;
 const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'latin1');
 
 const TYPES = {
@@ -127,18 +129,32 @@ function createHandler(o) {
     return buf;
   }
 
-  // Whether the live data can be used, from the live meta.json: 'ok', 'newer' (a format this app does not read)
-  // or 'unreachable'. Remembered for a while (an unreachable site for half a minute), so the data files of one
-  // page load wait for one check at most.
-  let format = null, formatUntil = 0;
-  function liveFormat() {
-    if (format && Date.now() < formatUntil) return format;
-    formatUntil = Infinity; // until it settles
-    format = live('meta.json', '', 'meta.json')
-      .then(buf => (formatSupported(JSON.parse(buf.toString('utf8'))) ? 'ok' : 'newer'))
-      .catch(() => 'unreachable');
-    format.then(v => { formatUntil = Date.now() + (v === 'unreachable' ? 30000 : FORMAT_TTL_MS); });
-    return format;
+  // data_versions whose live meta.json declared a format this app reads (versioned files of other versions are
+  // not taken from the live site).
+  const verified = new Set();
+  /** Note a live meta: true when this app reads its format (and its data_version is then trusted). */
+  function noteMeta(meta) {
+    const ok = formatSupported(meta);
+    if (ok && meta && meta.data_version != null) verified.add(String(meta.data_version));
+    return ok;
+  }
+  /** A fresh copy of the live meta.json (never a remembered one: a deploy can change it at any time). */
+  async function freshMeta() {
+    return JSON.parse((await live('meta.json', '', 'meta.json')).toString('utf8'));
+  }
+  const NEWER = 'the live data is in a newer format than this app reads';
+
+  /** The live file if this app may use it; throws (with the reason) otherwise. */
+  async function usableLive(rawRel, search, file) {
+    const version = new URLSearchParams(search).get('v');
+    if (version != null) {
+      if (!verified.has(version) && !noteMeta(await freshMeta())) throw new Error(NEWER);
+      if (!verified.has(version)) throw new Error(`data version ${version} is not the live site's`);
+      return live(rawRel, search, file);
+    }
+    const buf = await live(rawRel, search, file);
+    if (!noteMeta(await freshMeta())) throw new Error(NEWER); // checked after the file: a deploy in between is caught
+    return buf;
   }
 
   async function kept(file, source, rel, why, head) {
@@ -161,22 +177,17 @@ function createHandler(o) {
     let why = '';
     if (!head) { // HEAD: headers of the copy at hand, no live request and no cache write
       const isMeta = rawRel === 'meta.json';
-      const f = isMeta ? 'ok' : await liveFormat();
-      if (f === 'newer') why = 'the live data is in a newer format than this app reads';
-      else if (f === 'unreachable') why = 'the live site cannot be reached';
-      else {
-        let buf = null;
-        try { buf = await live(rawRel, search, cached); } catch (e) { why = e.message; }
-        if (buf && isMeta && !formatSupported(JSON.parse(buf.toString('utf8')))) {
-          // the page sees the newer format and asks for an update; the copies stay as they are
-          onData(rawRel, 'live', 'newer format, not kept');
-          return bufferResponse(buf, headersFor(cached, { 'X-Sg-Source': 'live' }));
-        }
-        if (buf) {
-          onData(rawRel, 'live');
-          writeAtomic(cached, buf).catch(e => onNote(rawRel, 'cache write failed: ' + e.message)); // for when the site is out of reach
-          return bufferResponse(buf, headersFor(cached, { 'X-Sg-Source': 'live' }));
-        }
+      let buf = null;
+      try { buf = isMeta ? await live(rawRel, search, cached) : await usableLive(rawRel, search, cached); } catch (e) { why = e.message; }
+      if (buf && isMeta && !noteMeta(JSON.parse(buf.toString('utf8')))) {
+        // the page sees the newer format and asks for an update; the copies stay as they are
+        onData(rawRel, 'live', 'newer format, not kept');
+        return bufferResponse(buf, headersFor(cached, { 'X-Sg-Source': 'live' }));
+      }
+      if (buf) {
+        onData(rawRel, 'live');
+        writeAtomic(cached, buf).catch(e => onNote(rawRel, 'cache write failed: ' + e.message)); // for when the site is out of reach
+        return bufferResponse(buf, headersFor(cached, { 'X-Sg-Source': 'live' }));
       }
     }
     for (const [file, source] of [[cached, 'cache'], [bundled, 'bundled']]) {

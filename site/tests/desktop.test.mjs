@@ -80,7 +80,10 @@ test('never serves a file outside site/', async () => {
 
 test('data: live first (query kept), and the answer is kept for later', async () => {
   const f = fixture();
-  const live = site({ 'catalog.json': () => new Response('["live"]', { headers: { 'content-type': 'application/json' } }) });
+  const live = site({
+    'meta.json': () => new Response('{"format":1,"data_version":"7"}'),
+    'catalog.json': () => new Response('["live"]', { headers: { 'content-type': 'application/json' } })
+  });
   const handle = createHandler({ siteDir: f.site, cacheDir: f.cache, liveBase: 'https://live.test/sams-garage/', fetch: (u, i) => live.fetch(u.replace('/sams-garage', ''), i) });
   const res = await get(handle, 'app://sg/data/catalog.json?v=7');
   assert.equal(await res.text(), '["live"]');
@@ -156,9 +159,48 @@ test('data: live data in a newer format is not used; the page still gets the liv
   assert.equal(JSON.parse(await meta.text()).format, DATA_FORMAT + 1);
   const cat = await get(handle, 'app://sg/data/catalog.json');
   assert.equal(await cat.text(), '["bundled"]');
-  assert.ok(!live.asked.some(u => u.includes('catalog.json')), 'the catalog is not even fetched');
+  assert.equal(cat.headers.get('x-sg-source'), 'bundled', 'the live catalog is not used');
   await wait();
   assert.ok(!fs.existsSync(path.join(f.cache, 'meta.json')), 'the newer meta.json is not kept');
+});
+
+test('data: a deploy that bumps the format between two requests is caught (unversioned files)', async () => {
+  const f = fixture();
+  let format = DATA_FORMAT, catalog = '["v1 catalog"]';
+  const handle = handler(f, site({
+    'meta.json': () => new Response(JSON.stringify({ format, data_version: 'A' })),
+    'catalog.json': () => new Response(catalog)
+  }).fetch);
+  const first = await get(handle, 'app://sg/data/catalog.json');
+  assert.equal(first.headers.get('x-sg-source'), 'live');
+  await wait();
+  format = DATA_FORMAT + 1; catalog = '{"records":[]}'; // the deploy
+  const second = await get(handle, 'app://sg/data/catalog.json');
+  assert.equal(second.headers.get('x-sg-source'), 'cache', 'not the new catalog: the copy kept before the deploy');
+  assert.equal(await second.text(), '["v1 catalog"]');
+  await wait();
+  assert.equal(fs.readFileSync(path.join(f.cache, 'catalog.json'), 'utf8'), '["v1 catalog"]', 'the copy is not overwritten');
+});
+
+test('data: a versioned file is taken live only for a data_version with a readable format', async () => {
+  const f = fixture();
+  let meta = { format: DATA_FORMAT, data_version: 'A' };
+  const live = site({
+    'meta.json': () => new Response(JSON.stringify(meta)),
+    'records/a__1.json': url => new Response(JSON.stringify({ id: 'a:1', from: new URL(url).searchParams.get('v') }))
+  });
+  const handle = handler(f, live.fetch);
+  await get(handle, 'app://sg/data/meta.json'); // what the page asks first: verifies A
+  const a = await get(handle, 'app://sg/data/records/a__1.json?v=A');
+  assert.equal(a.headers.get('x-sg-source'), 'live');
+  const b = await get(handle, 'app://sg/data/records/a__1.json?v=B'); // unknown version: meta is fetched again, still A
+  assert.notEqual(b.headers.get('x-sg-source'), 'live');
+  assert.ok(!live.asked.some(u => u.includes('a__1.json?v=B')), 'an unverified version is not even fetched');
+  meta = { format: DATA_FORMAT, data_version: 'B' }; // a deploy in the same format
+  assert.equal((await get(handle, 'app://sg/data/records/a__1.json?v=B')).headers.get('x-sg-source'), 'live');
+  meta = { format: DATA_FORMAT + 1, data_version: 'C' }; // a deploy in a newer format
+  const c = await get(handle, 'app://sg/data/records/a__1.json?v=C');
+  assert.notEqual(c.headers.get('x-sg-source'), 'live');
 });
 
 test('data: a live request that hangs gives up after the timeout', async () => {
