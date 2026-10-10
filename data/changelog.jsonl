@@ -672,3 +672,5 @@
 {"at":"2026-10-09T17:23:56Z","id":"sbirgov:1012521","event":"updated","from":"422be3a484f8f8eba2567ca3c5fb4a145958deb9","to":"1e622636655234389650b5d4bdc42d9f6d075db5","fields":["description"]}
 {"at":"2026-10-09T17:23:56Z","id":"sbirgov:1012522","event":"updated","from":"26b7106fe6e2159784724dab84ea467e2ef641c3","to":"5f773d790aa5cf7d0cb4a73c26e64fef07a44a78","fields":["description"]}
 {"at":"2026-10-09T17:23:56Z","id":"sbirgov:1012523","event":"updated","from":"d369d3c0281bbdc11026ef67acdaf9e7628382f6","to":"07b2797e27928b91657fb48432236bd83255414c","fields":["description"]}
+{"at":"2026-10-10T14:30:53Z","id":"sbirgov:13020","event":"updated","from":"87c5d8711c12af766251b008036405fed3258d25","to":"faaf86f92aa86343854986d35a85e7128ecec489","fields":["qa_open_date","qa_close_date","description","keywords"]}
+{"at":"2026-10-10T14:30:53Z","id":"sbirgov:13022","event":"updated","from":"7ef0ca358f8c63f74e2b31270cf66a79cc218c8b","to":"5fefb83345fceb7209104f420591755de2de6f6b","fields":["qa_open_date","qa_close_date","description","keywords"]}
