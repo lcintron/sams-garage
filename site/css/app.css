@@ -118,6 +118,17 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .search-kbd { position: absolute; right: 9px; color: var(--text-dim); pointer-events: none; }
 #q:focus + .search-kbd, #q:not(:placeholder-shown) + .search-kbd { display: none; }
 .topbar-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* Desktop app: the top bar is the window's title bar (electron/main.js). Its empty parts move the window and a
+   double-click on them maximizes it; its controls stay clickable. The system's window buttons sit over its right
+   end (Windows, Linux: where env(titlebar-area-*) ends; about 138 px if the browser does not say) or, on macOS, its
+   left end. Panels that cover the page (the filters drawer, a full-window topic) start below the bar, so the window
+   can still be moved and its buttons stay clear. */
+html[data-titlebar] #topbar { -webkit-app-region: drag; user-select: none; }
+html[data-titlebar] #topbar :is(input, button, select, a, .search-wrap, .menu-wrap, .pill) { -webkit-app-region: no-drag; }
+html[data-titlebar="overlay"] #topbar { padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px)) + 8px); }
+html[data-titlebar="mac"] #topbar { padding-left: 84px; }
+html[data-titlebar] :is(#filters, #detail, .scrim) { top: calc(var(--topbar-h) + 1px) !important; }
 .nav { display: flex; gap: 6px; }
 #themeBtn .i-moon { display: none; }
 :root[data-theme="light"] #themeBtn .i-sun { display: none; }

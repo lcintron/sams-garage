@@ -26,7 +26,8 @@ import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.0'; // app version; bump via scripts/release.js
+const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
 const WIDE = window.matchMedia('(min-width: 1280px)');   // filters as a column (else a drawer)
 const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side by side (else detail full-screen)
 
@@ -449,6 +450,11 @@ function syncThemeUi() {
   el.themeBtn.title = `Switch to ${next} theme`;
   el.themeBtn.setAttribute('aria-label', `Switch to ${next} theme`);
   $('meta[name="theme-color"]').setAttribute('content', cur === 'dark' ? '#0b1118' : '#ffffff');
+  // Desktop app: the window buttons drawn over the top bar take the bar's colors.
+  if (DESKTOP && DESKTOP.setTitleBarColors) {
+    const css = getComputedStyle(document.documentElement);
+    DESKTOP.setTitleBarColors({ color: css.getPropertyValue('--bg-2').trim(), symbolColor: css.getPropertyValue('--text').trim() });
+  }
 }
 
 function openDrawer() {
@@ -592,7 +598,8 @@ function setupPwa() {
   });
   window.addEventListener('appinstalled', () => { el.installBtn.classList.add('hidden'); toast('Installed'); });
 
-  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  // The desktop app has no service worker: its files are on disk and it keeps the data fresh itself (electron/).
+  if (DESKTOP || !('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
   const sw = navigator.serviceWorker;
   const hadController = !!sw.controller; // the first install also takes control: that is not an update
   sw.addEventListener('controllerchange', () => {

@@ -36,6 +36,8 @@
     if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
     if (p.filtersCollapsed) document.documentElement.classList.add('filters-collapsed');
   } catch (e) { /* storage blocked: follow the system */ }
+  // Desktop app: the top bar is also the window's title bar (css: html[data-titlebar]; electron/preload.js).
+  if (window.sgDesktop && window.sgDesktop.titleBar) document.documentElement.dataset.titlebar = window.sgDesktop.titleBar;
 </script>
 <link rel="stylesheet" href="css/app.css">
 <link rel="modulepreload" href="js/app.js">

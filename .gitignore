@@ -1,4 +1,4 @@
-# Generated site data (rebuilt from data/ by `python -m scraper build` in CI)
+# Generated site data (rebuilt from data/ by `python -m scraper build`; CI and the installers build it fresh)
 site/data/
 
 # Python
@@ -7,10 +7,19 @@ __pycache__/
 .pytest_cache/
 .venv/
 
-# Node
+# dependencies and build output (no lock file is kept, as in GenGIS)
 node_modules/
 dist/
+out/
+package-lock.json
 
-# OS
+# logs and OS files
+*.log
+npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# local editor / tool state
+.vscode/
+.idea/
+.claude/settings.local.json
