@@ -1,7 +1,9 @@
 name: CI
 
 # Offline checks on every push and pull request: scraper unit tests (saved fixtures, no network),
-# a schema check and a build smoke test of the committed database, and the site's node tests.
+# a schema check and a build smoke test of the committed database, a dry run of the Pages assembly, the
+# site's node tests (including the desktop app's app:// handler), and syntax checks of the desktop app and
+# the release scripts.
 on:
   push:
   pull_request:
@@ -33,6 +35,15 @@ jobs:
         run: python -m scraper validate
       - name: Build smoke test
         run: python -m scraper build --out "$RUNNER_TEMP/site-data"
+      - name: Site assembly smoke test
+        # What every Pages deploy runs (here with this commit as both the code and the data).
+        env:
+          ASSEMBLE_NO_PIP: '1'
+        run: |
+          bash scripts/assemble-site.sh HEAD HEAD "$RUNNER_TEMP/_site"
+          test -s "$RUNNER_TEMP/_site/data/catalog.json"
+          test -s "$RUNNER_TEMP/_site/VERSION.txt"
+          test ! -e "$RUNNER_TEMP/_site/tests" && test ! -e "$RUNNER_TEMP/_site/package.json"
 
   node:
     name: Site tests
@@ -43,6 +54,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          package-manager-cache: false   # no lock file and no dependencies
+          package-manager-cache: false   # no lock file; the tests need no npm install
       - name: node --test
         run: npm test
+      - name: Syntax checks (desktop app and scripts)
+        run: |
+          bash -n scripts/assemble-site.sh
+          for f in electron/*.js scripts/*.js; do node --check "$f"; done
