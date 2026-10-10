@@ -1,6 +1,6 @@
-# 🛠️ [SAM's Garage (Sg)](https://sg.luiscintron.com)
+# 🛠️ [SAM's Garage (Sg)](https://lcintron.github.io/sams-garage/)
 
-[![SAM's Garage Live](https://img.shields.io/badge/Live-sg.luiscintron.com-success?style=for-the-badge&logo=githubpages&logoColor=white)](https://sg.luiscintron.com)
+[![SAM's Garage Live](https://img.shields.io/badge/Live-lcintron.github.io%2Fsams--garage-success?style=for-the-badge&logo=githubpages&logoColor=white)](https://lcintron.github.io/sams-garage/)
 [![Latest release](https://img.shields.io/github/v/release/lcintron/sams-garage?style=for-the-badge&logo=github&label=Release)](https://github.com/lcintron/sams-garage/releases/latest)
 [![PWA and Electron](https://img.shields.io/badge/PWA%20%2B%20Electron-Web%20%26%20Desktop-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://github.com/lcintron/sams-garage/releases/latest)
 
@@ -11,8 +11,9 @@ Air Force, DARPA, SOCOM, …), HHS/NIH, NSF, DOE, NASA, USDA, DHS, DOT, EPA, ED,
 [SBIR.gov](https://www.sbir.gov/topics), the [DoD SBIR/STTR portal (DSIP)](https://www.dodsbirsttr.mil/topics-app/) and
 [Grants.gov](https://www.grants.gov/). It runs in the browser (installable, works offline) or as a desktop app
 ([installers](https://github.com/lcintron/sams-garage/releases/latest) for Windows, macOS and Linux). All searching
-happens on your device: no servers, accounts or tracking. Until the custom domain is set up, the site is at
-<https://lcintron.github.io/sams-garage/>.
+happens on your device: no servers, accounts or tracking. The site is at <https://lcintron.github.io/sams-garage/>
+for now; it will move to sg.luiscintron.com once that custom domain is configured (steps under "One-time setup" in
+[How the data stays fresh](#how-the-data-stays-fresh)).
 
 ## Features
 
