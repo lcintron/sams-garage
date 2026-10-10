@@ -31,7 +31,7 @@ Informational only: always confirm dates and requirements in the official solici
 
 ## Run it locally
 
-You need Python 3.12+ and Node 18+.
+You need Python 3.12+ and Node 22+ (`npm test` passes a glob to `node --test`).
 
 ```sh
 pip install -r requirements.txt

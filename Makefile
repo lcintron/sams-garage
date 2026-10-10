@@ -21,7 +21,7 @@ NPX ?= npx
 PYTHON ?= python
 BUMP ?= auto
 PRE ?=
-RELEASE_FLAGS := $(if $(PRE),--pre=$(PRE),) $(if $(DRY),--dry,) $(if $(CI),--ci,)
+RELEASE_FLAGS := $(if $(PRE),--pre='$(PRE)',) $(if $(DRY),--dry,) $(if $(CI),--ci,)
 
 .PHONY: help serve install scrape scrape-quick data test build build-win build-mac build-linux dist-all release version clean
 
@@ -64,7 +64,7 @@ dist-all: install data
 	$(NPX) electron-builder -wml --publish never
 
 release:
-	node scripts/release.js $(BUMP) $(RELEASE_FLAGS)
+	node scripts/release.js '$(BUMP)' $(RELEASE_FLAGS)
 
 version:
 	@node scripts/release.js --show
