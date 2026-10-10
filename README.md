@@ -105,7 +105,7 @@ they decide the [semantic version](https://semver.org/) bump since the last tag:
 
 | Commits since the last release | Bump | Example |
 | --- | --- | --- |
-| `BREAKING CHANGE:` in a body, or `type!:` | major | `feat!: drop the v1 data format` |
+| a `BREAKING CHANGE:` footer line, or `type!:` | major | `feat!: drop the v1 data format` |
 | `feat:` | minor | `feat: export the watchlist as CSV` |
 | `fix:`, `perf:`, `revert:` | patch | `fix: keep the filter drawer open on resize` |
 | only `chore:`, `docs:`, `ci:`, `build:`, `test:`, `refactor:`, `style:`, `data:` | none | `data: refresh 2026-10-09 (352 open, 4 new)` |

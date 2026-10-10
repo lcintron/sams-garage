@@ -4,7 +4,7 @@
  *   node scripts/release.js [auto|major|minor|patch|prerelease] [--pre=Beta] [--dry] [--no-push] [--ci] [--show]
  *
  * - Picks the semantic-version bump from the conventional commits since the last tag when "auto" (default):
- *     "BREAKING CHANGE" / "type!:" -> major,  feat: -> minor,  fix: / perf: / revert: -> patch,
+ *     a "BREAKING CHANGE:" footer / "type!:" -> major,  feat: -> minor,  fix: / perf: / revert: -> patch,
  *     only chore/docs/ci/style/refactor/test/build/data commits -> no release (exit 0, released=false)
  * - --ci: non-interactive mode for GitHub Actions; writes released/tag/version to $GITHUB_OUTPUT
  * - Writes the new version everywhere it is shown: package.json, site/js/app.js (APP_VERSION, shown in the About
@@ -45,7 +45,9 @@ function autoBump() {
   const range = tag ? `${tag}..HEAD` : 'HEAD';
   const log = sh(`git log ${range} --format=%s%n%b`, true);
   if (!log.trim()) return null;
-  if (/BREAKING CHANGE|^[a-z]+(\([^)]*\))?!:/m.test(log)) return 'major';
+  // The Conventional Commits markers only: a "BREAKING CHANGE:" (or "BREAKING-CHANGE:") footer line, or "type!:" /
+  // "type(scope)!:". The words inside a sentence ("... a BREAKING CHANGE footer ...") do not count.
+  if (/^BREAKING[ -]CHANGE:|^[a-z]+(\([^)]*\))?!:/m.test(log)) return 'major';
   if (/^feat(\([^)]*\))?:/m.test(log)) return 'minor';
   if (/^(fix|perf|revert)(\([^)]*\))?:/m.test(log)) return 'patch';
   return null; // nothing user-facing since the last release (the daily "data: refresh" commits included)
