@@ -22,10 +22,10 @@ from datetime import datetime
 from typing import Any, Iterable
 
 from .model import HASH_FIELDS, ID_PREFIXES, LINK_KEYS, SOURCE_NAMES, SOURCE_PREFERENCE, Record, utc_timestamp
+from .sources.base import SourceResult
 
 # The source an id was first published by (its prefix). With stable ids it can differ from a record's `source`.
 _SOURCE_OF_PREFIX = {prefix: source for source, prefix in ID_PREFIXES.items()}
-from .sources.base import SourceResult
 
 # Scalar fields a secondary record may fill when the primary has no value.
 _FILLABLE = (
