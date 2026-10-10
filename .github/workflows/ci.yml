@@ -22,6 +22,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the release tags, for the released-scraper check below
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -44,6 +46,18 @@ jobs:
           test -s "$RUNNER_TEMP/_site/data/catalog.json"
           test -s "$RUNNER_TEMP/_site/VERSION.txt"
           test ! -e "$RUNNER_TEMP/_site/tests" && test ! -e "$RUNNER_TEMP/_site/package.json"
+      - name: The released scraper still builds this data
+        # The live site is the latest release's code with the newest data, built by that release's scraper
+        # (scripts/assemble-site.sh). A change to data/ that the released scraper cannot build must wait for a
+        # release; this catches it here instead of in the daily deploy. Skipped until the first release.
+        run: |
+          tag=$(git describe --tags --abbrev=0 --match 'v*' --exclude 'v*-*' HEAD 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "No release tag yet: nothing to check."
+            exit 0
+          fi
+          bash scripts/assemble-site.sh "$tag" HEAD "$RUNNER_TEMP/_released"
+          test -s "$RUNNER_TEMP/_released/data/catalog.json"
 
   node:
     name: Site tests

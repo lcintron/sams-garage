@@ -188,4 +188,12 @@ The workflows live in `.github/workflows/`:
 - `scrape.yml` runs daily at 06:15 UTC and can be started manually with an optional `limit`. It scrapes, validates and commits `data/`. The deploy job then publishes Pages: the code of the latest release tag with the data of that exact commit.
 - Every Pages deploy (`scrape.yml`, `release.yml`, and `pages.yml` by hand) goes through `scripts/assemble-site.sh <code-ref> <data-ref>`: it takes `site/` and `scraper/` from the code ref, `data/` from the data ref, runs `python -m scraper build --out site/data` with the code ref's scraper, and leaves out `site/tests`, `site/icons/make-icons.py` and `site/package.json`, so development files are never published.
 - `release.yml` (by hand) tags a release, builds the desktop installers, each with a `site/data` snapshot built from the newest `data/` on main, and deploys Pages.
-- `ci.yml` runs pytest, the data validation, a build smoke test, a dry run of the site assembly and the site's `npm test`.
+- `ci.yml` runs pytest, the data validation, a build smoke test, a dry run of the site assembly, a check that the latest release's scraper still builds the data (once there is a release), and the site's `npm test`.
+
+**Schema changes need a release.** The live site is the latest release's code with the newest data, built by
+that release's scraper, and installed desktop apps read the data of the live site. So a change to the database
+schema in `data/`, or to the files under `site/data`, reaches users only through a release: merge it, then cut
+one (README, "Releases"). CI fails a change to `data/` that the released scraper cannot build. When the shape of
+the site data changes incompatibly, bump `SITE_FORMAT` in `build.py` together with `DATA_FORMAT` in
+`site/js/data.js` and `electron/protocol.js`: apps that read an older format then keep the data they have and
+ask for an update.
