@@ -32,7 +32,7 @@
 <script>
   // Apply the saved theme before first paint (no flash). Dark is the default unless the system asks for light.
   try {
-    var p = JSON.parse(localStorage.getItem('sg.prefs') || '{}');
+    var p = JSON.parse(localStorage.getItem('sg.prefs') || localStorage.getItem('sbir.prefs') || '{}'); // sbir.: before the rename (js/store.js migrates it)
     if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
     if (p.filtersCollapsed) document.documentElement.classList.add('filters-collapsed');
   } catch (e) { /* storage blocked: follow the system */ }

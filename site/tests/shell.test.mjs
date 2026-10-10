@@ -76,6 +76,21 @@ test('store falls back to memory and round-trips', () => {
   store.useStorage(null);
 });
 
+test('store moves SBIR Portal keys (sbir.*) to sg.* once, never overwriting', () => {
+  const mem = new Map([['sbir.watchlist', '["dsip:A1"]'], ['sbir.prefs', '{"theme":"light"}'], ['sg.prefs', '{"theme":"dark"}'], ['other', 'x']]);
+  const s = {
+    get length() { return mem.size; }, key: i => [...mem.keys()][i] ?? null,
+    getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k)
+  };
+  store.useStorage(s);
+  assert.deepEqual([...store.watchlist()], ['dsip:A1']);
+  assert.equal(store.prefs().theme, 'dark', 'an existing sg.* value wins');
+  assert.deepEqual([...mem.keys()].sort(), ['other', 'sg.prefs', 'sg.watchlist']);
+  store.useStorage(s); // a second run changes nothing
+  assert.deepEqual([...mem.keys()].sort(), ['other', 'sg.prefs', 'sg.watchlist']);
+  store.useStorage(null);
+});
+
 test('data helpers', () => {
   assert.equal(idSafe('dsip:ARM26BX06-NV012'), 'dsip__ARM26BX06-NV012');
   assert.equal(metaVersion({ data_version: 'abc' }), 'abc');
