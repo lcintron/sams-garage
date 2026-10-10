@@ -20,7 +20,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const semver = require('./semver');
 
 const root = path.join(__dirname, '..');
@@ -29,7 +29,10 @@ const flag = n => args.includes('--' + n);
 const opt = n => { const a = args.find(x => x.startsWith('--' + n + '=')); return a ? a.split('=')[1] : null; };
 const bumpArg = args.find(a => !a.startsWith('--')) || 'auto';
 
-const sh = (cmd, quiet) => execSync(cmd, { cwd: root, stdio: quiet ? ['ignore', 'pipe', 'ignore'] : ['ignore', 'pipe', 'inherit'] }).toString().trim();
+// git runs with an argument list, never through a shell: tag and branch names can't inject commands
+const git = (argv, quiet) => execFileSync('git', argv, { cwd: root, stdio: quiet ? ['ignore', 'pipe', 'ignore'] : ['ignore', 'pipe', 'inherit'] }).toString().trim();
+// a release tag: v + semantic version (the only kind this script reads or writes)
+const TAG_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 const write = (f, s) => fs.writeFileSync(path.join(root, f), s);
 
@@ -40,18 +43,23 @@ function output(obj) {
 
 if (flag('show')) { console.log(JSON.parse(read('package.json')).version); process.exit(0); }
 
-const branchName = () => { const b = sh('git rev-parse --abbrev-ref HEAD', true); return b === 'HEAD' ? 'main' : b; };
+const branchName = () => { const b = git(['rev-parse', '--abbrev-ref', 'HEAD'], true); return b === 'HEAD' ? 'main' : b; };
 const branch = branchName();
 // CI: release what is on the remote branch now (a data refresh may have landed since the run started)
-if (flag('ci') && !flag('no-push')) sh(`git pull --rebase --quiet origin ${branch}`);
+if (flag('ci') && !flag('no-push')) git(['pull', '--rebase', '--quiet', 'origin', branch]);
 
 const current = JSON.parse(read('package.json')).version;
 
-function lastTag() { try { return sh('git describe --tags --abbrev=0 --match "v*"', true); } catch (e) { return null; } }
+function lastTag() {
+  let tag;
+  try { tag = git(['describe', '--tags', '--abbrev=0', '--match', 'v*'], true); } catch (e) { return null; }
+  if (!TAG_RE.test(tag)) { console.error('The nearest v* tag is not a release tag (v<major>.<minor>.<patch>): ' + JSON.stringify(tag)); process.exit(1); }
+  return tag;
+}
 
 function autoBump() {
   const tag = lastTag();
-  return semver.bumpFor(sh(`git log ${tag ? `${tag}..HEAD` : 'HEAD'} --format=%s%n%b`, true));
+  return semver.bumpFor(git(['log', tag ? `${tag}..HEAD` : 'HEAD', '--format=%s%n%b'], true));
 }
 
 const auto = bumpArg === 'auto' ? autoBump() : null;
@@ -67,13 +75,13 @@ if (pre && !semver.validPre(pre)) { console.error('Invalid pre-release label: ' 
 const next = semver.format(semver.bump(semver.parse(current), kind, pre));
 const tag = 'v' + next;
 // the tag must be a valid git ref before anything is written or committed
-try { sh(`git check-ref-format refs/tags/${tag}`, true); } catch (e) { console.error('Not a valid tag name: ' + tag); process.exit(1); }
+try { if (!TAG_RE.test(tag)) throw new Error(); git(['check-ref-format', `refs/tags/${tag}`], true); } catch (e) { console.error('Not a valid tag name: ' + tag); process.exit(1); }
 
 console.log(`${current} -> ${next}  (${bumpArg === 'auto' ? 'auto: ' : ''}${kind})`);
 
 if (!flag('dry')) {
-  if (sh('git status --porcelain', true)) { console.error('Working tree is not clean. Commit or stash first.'); process.exit(1); }
-  try { sh(`git rev-parse -q --verify refs/tags/${tag}`, true); console.error('Tag already exists: ' + tag); process.exit(1); } catch (e) { /* ok */ }
+  if (git(['status', '--porcelain'], true)) { console.error('Working tree is not clean. Commit or stash first.'); process.exit(1); }
+  try { git(['rev-parse', '-q', '--verify', `refs/tags/${tag}`], true); console.error('Tag already exists: ' + tag); process.exit(1); } catch (e) { /* ok */ }
 }
 
 // ---- rewrite every place the version is shown ----
@@ -91,14 +99,14 @@ for (const [file, fn] of edits) {
 
 if (flag('dry')) { console.log('Dry run: nothing written, committed or tagged.'); output({ released: 'false', tag, version: next }); process.exit(0); }
 
-sh('git add ' + edits.map(([f]) => f).join(' '));
-sh(`git commit -q -m "chore(release): ${tag}"`);
-const tagIt = () => sh(`git tag -f -a ${tag} -m "SAM's Garage ${tag}"`, true);
+git(['add', '--', ...edits.map(([f]) => f)]);
+git(['commit', '-q', '-m', `chore(release): ${tag}`]);
+const tagIt = () => git(['tag', '-f', '-a', tag, '-m', `SAM's Garage ${tag}`], true);
 tagIt();
 console.log('Committed and tagged ' + tag);
 
 if (flag('no-push')) { console.log('Not pushed (--no-push).'); output({ released: 'true', tag, version: next }); process.exit(0); }
-const push = () => sh(`git push --atomic origin HEAD:refs/heads/${branch} refs/tags/${tag}`);
+const push = () => git(['push', '--atomic', 'origin', `HEAD:refs/heads/${branch}`, `refs/tags/${tag}`]);
 try {
   push();
 } catch (e) {
@@ -106,7 +114,7 @@ try {
   if (flag('ci')) {
     // The branch moved while this ran (most likely the daily data commit): replay the release commit on top of
     // it, move the tag there, and try once more.
-    try { sh(`git pull --rebase --quiet origin ${branch}`); tagIt(); push(); pushed = true; } catch (e2) { /* reported below */ }
+    try { git(['pull', '--rebase', '--quiet', 'origin', branch]); tagIt(); push(); pushed = true; } catch (e2) { /* reported below */ }
   }
   if (!pushed) {
     console.error(`Push failed: ${branch} moved on the remote during the release (or the push was refused). Nothing was pushed: re-run the release.`);
