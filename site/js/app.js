@@ -199,6 +199,19 @@ function toggleWatch(id) {
 
 // ---------- routing ----------
 
+/**
+ * A topic route whose id another record has absorbed (an old link, or the catalog was refreshed while the topic
+ * was open): point it at that record and put its id in the address, keeping the filters.
+ */
+function followAlias(route = app.route) {
+  if (route.name !== 'detail' || !app.loaded) return;
+  const now = resolveId(route.id, app.byId, app.aliasOf);
+  if (now && now !== route.id) {
+    route.id = now;
+    history.replaceState(null, '', buildHash('/s/' + encodeId(now), app.state));
+  }
+}
+
 function parseRoute(path) {
   if (path === '/' || path === '') return { name: 'list', id: null, mode: 'all' };
   if (path === '/watch') return { name: 'list', id: null, mode: 'watch' };
@@ -219,14 +232,7 @@ async function onHashChange() {
   const stateChanged = toQuery(parseQuery(query)) !== toQuery(app.state);
   if (stateChanged) app.state = parseQuery(query);
   if (route.mode) app.listMode = route.mode;
-  // An old id (absorbed by another record) in a link or bookmark: show that record, under its id now.
-  if (route.name === 'detail' && app.loaded) {
-    const now = resolveId(route.id, app.byId, app.aliasOf);
-    if (now && now !== route.id) {
-      route.id = now;
-      history.replaceState(null, '', buildHash('/s/' + encodeId(now), app.state));
-    }
-  }
+  followAlias(route); // an old id in a link or bookmark: that record, under its id now
   app.route = route;
   if (el.q.value.trim() !== app.state.q && document.activeElement !== el.q) el.q.value = app.state.q;
 
@@ -391,6 +397,7 @@ async function checkVersion(meta) {
       app.descriptions = null;
       app.indexState = 'idle';
       scheduleIndex(true);
+      followAlias();
       refresh({ keepScroll: true });
       if (app.route.name === 'detail') showDetail(app.route.id, app.route);
       toast('Data updated — ' + app.catalog.length.toLocaleString() + ' records', { id: 'data' });
@@ -417,6 +424,7 @@ function scheduleIndex(fresh = false) {
       app.indexState = 'ready';
       el.indexState.textContent = '';
       console.debug(`[sg] indexed ${docs.length} docs in ${(performance.now() - t0).toFixed(0)} ms`);
+      followAlias();
       if (app.state.q || app.state.profile.length || app.listMode === 'all') refresh({ keepScroll: true });
       if (app.route.name === 'detail') list.select(app.route.id);
     } catch (err) {
