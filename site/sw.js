@@ -29,8 +29,11 @@ self.addEventListener('install', e => {
 });
 
 /**
- * Copy every entry of a legacy data cache into DATA_CACHE (entries already there win), so offline data survives the
- * rename too. Returns the legacy caches that could not be copied: they are kept for the next activation.
+ * Copy every data entry of a legacy data cache into DATA_CACHE (entries already there win), so offline data
+ * survives the rename too. The old app may have lived under another path, so each entry is filed under this
+ * worker's scope: everything from "data/" on (query included) is kept, e.g. /sbir/data/catalog.json ->
+ * <scope>data/catalog.json; entries outside a data/ folder are dropped. Returns the legacy caches that could not
+ * be copied: they are kept for the next activation.
  */
 async function adoptLegacyData(keys) {
   const keep = new Set();
@@ -39,9 +42,13 @@ async function adoptLegacyData(keys) {
       const from = await caches.open(name);
       const to = await caches.open(DATA_CACHE);
       for (const req of await from.keys()) {
-        if (await to.match(req)) continue;
+        const old = new URL(req.url);
+        const at = old.pathname.indexOf('/data/');
+        if (at < 0) continue;
+        const url = new URL(old.pathname.slice(at + 1) + old.search, self.registration.scope).href;
+        if (await to.match(url)) continue;
         const res = await from.match(req);
-        if (res) await to.put(req, res);
+        if (res) await to.put(url, res);
       }
     } catch {
       keep.add(name);
