@@ -224,6 +224,24 @@ def test_a_kept_id_still_dedupes_a_source_that_appears_later():
     assert all(event["event"] != "new" for event in events)
 
 
+def test_two_published_records_that_come_together_keep_the_first_published_id():
+    # sbirgov:Y (day 1) and dsip:X (day 2) are separate records with different topic numbers; on day 3 DSIP
+    # corrects its topic number to sbir.gov's, and they share a key: the id published first wins.
+    db = Db()
+    sbir = make_record("sbir_gov", "13020", topic_number="N252-001", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    db.run(DAY1, sbir_gov=ok("sbir_gov", sbir))
+    dsip = make_record("dod_dsip", "N252-001X", topic_number="N252-999")
+    db.run(DAY2, sbir_gov=ok("sbir_gov", sbir), dod_dsip=ok("dod_dsip", dsip))
+    assert set(db.records) == {"sbirgov:13020", "dsip:N252-001X"}
+    fixed = make_record("dod_dsip", "N252-001X", topic_number="N252-001")
+    events = db.run(DAY3, sbir_gov=ok("sbir_gov", sbir), dod_dsip=ok("dod_dsip", fixed))
+    assert set(db.records) == {"sbirgov:13020"}
+    record = db.records["sbirgov:13020"]
+    assert record.source == "dod_dsip" and record.alt_ids == ["dsip:N252-001X"]
+    assert record.first_seen == "2026-10-09T06:15:00Z"
+    assert all(event["event"] != "new" for event in events)
+
+
 def test_an_already_rekeyed_record_keeps_its_published_id():
     # Published as sbirgov:13020 after absorbing dsip:X (the old rule): it does not flip back when DSIP returns.
     db = Db()

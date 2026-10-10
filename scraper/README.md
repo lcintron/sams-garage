@@ -96,7 +96,9 @@ Each run does the following:
    description wins. **Ids are stable:** a new record takes the primary's id, and a published id never
    changes. If a better source appears later (for example DSIP after sbir.gov), or the source that first
    listed a record drops it while another still lists it, the record keeps its id: `source` and the
-   content follow the preferred source that lists it now, and the other ids go into `alt_ids`.
+   content follow the preferred source that lists it now, and the other ids go into `alt_ids`. When two records
+   that were published separately turn out to be the same topic, the one published first (earliest
+   `first_seen`) keeps its id.
    `first_seen` is kept, and the site's `records/<id>.json` also shows the events logged under its
    `alt_ids`. So an id's prefix names the source that *first* published the record, which can differ
    from `source`. (Two records re-keyed by the older "the id moves" rule keep their current ids.)

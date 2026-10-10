@@ -194,8 +194,9 @@ def combine(members: list[Record], priors: list[Record]) -> Record:
 
     Ids are stable: once published, a record keeps its id even when its content now comes from another
     source (a better one appeared, or the one that first listed it dropped it). When the cluster has previous
-    records, the id is the continuing prior's (see _pick_prior); `source` names where the content comes from
-    now, and every other id goes into `alt_ids`."""
+    records, the id is the one published first (earliest first_seen, then id), even when two records that were
+    published separately come together; `source` names where the content comes from now, and every other id goes
+    into `alt_ids`."""
     ordered = sorted(members, key=lambda record: (SOURCE_PREFERENCE[record.source], record.id))
     primary = copy.deepcopy(ordered[0])
     for other in ordered[1:]:
@@ -213,9 +214,8 @@ def combine(members: list[Record], priors: list[Record]) -> Record:
         _fill_links(primary, prior)
     absorbed = {record.id for record in ordered} | {prior.id for prior in priors}
     absorbed |= {alt for prior in priors for alt in prior.alt_ids}
-    continuing = _pick_prior(primary.id, priors)
-    if continuing is not None:
-        primary.id = continuing.id
+    if priors:
+        primary.id = min(priors, key=lambda prior: (prior.first_seen or "", prior.id)).id
     primary.alt_ids = sorted(absorbed - {primary.id})
     return primary.finalize()
 
