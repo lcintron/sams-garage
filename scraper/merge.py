@@ -21,8 +21,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable
 
-from .model import HASH_FIELDS, LINK_KEYS, SOURCE_NAMES, SOURCE_PREFERENCE, Record, utc_timestamp
+from .model import HASH_FIELDS, ID_PREFIXES, LINK_KEYS, SOURCE_NAMES, SOURCE_PREFERENCE, Record, utc_timestamp
 from .sources.base import SourceResult
+
+# The source an id was first published by (its prefix). With stable ids it can differ from a record's `source`.
+_SOURCE_OF_PREFIX = {prefix: source for source, prefix in ID_PREFIXES.items()}
 
 # Scalar fields a secondary record may fill when the primary has no value.
 _FILLABLE = (
@@ -151,13 +154,19 @@ def _cluster(snapshot_records: list[Record], previous: list[Record]) -> list[tup
 
     Links: a previous record to each of its alt_ids, and any records sharing a dedupe key
     (agency + normalized topic number). A key only links records when no source has two different
-    records with it, so two distinct topics from one source are never folded together.
+    records with it, so two distinct topics from one source are never folded together. A previous record
+    counts for the source its id names, not the one feeding it now: a kept id (dsip:X now fed by sbir.gov,
+    which lists it as sbirgov:Y) must not look like a second sbir.gov record next to sbirgov:Y.
     """
     ids_by_key: dict[tuple[str, str], dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-    for record in [*snapshot_records, *previous]:
+    for record in snapshot_records:
         key = record.dedupe_key()
         if key:
             ids_by_key[key][record.source].add(record.id)
+    for record in previous:
+        key = record.dedupe_key()
+        if key:
+            ids_by_key[key][_SOURCE_OF_PREFIX.get(record.id.split(":", 1)[0], record.source)].add(record.id)
     mergeable = {key for key, by_source in ids_by_key.items() if all(len(ids) == 1 for ids in by_source.values())}
 
     sets = _DisjointSet()
@@ -181,7 +190,13 @@ def _cluster(snapshot_records: list[Record], previous: list[Record]) -> list[tup
 
 def combine(members: list[Record], priors: list[Record]) -> Record:
     """Fold a cluster into one record. Primary = most preferred source (dod_dsip > sbir_gov > grants_gov);
-    secondaries fill empty fields, contribute links/keywords, and the longest description wins."""
+    secondaries fill empty fields, contribute links/keywords, and the longest description wins.
+
+    Ids are stable: once published, a record keeps its id even when its content now comes from another
+    source (a better one appeared, or the one that first listed it dropped it). When the cluster has previous
+    records, the id is the one published first (earliest first_seen, then id), even when two records that were
+    published separately come together; `source` names where the content comes from now, and every other id goes
+    into `alt_ids`."""
     ordered = sorted(members, key=lambda record: (SOURCE_PREFERENCE[record.source], record.id))
     primary = copy.deepcopy(ordered[0])
     for other in ordered[1:]:
@@ -199,6 +214,8 @@ def combine(members: list[Record], priors: list[Record]) -> Record:
         _fill_links(primary, prior)
     absorbed = {record.id for record in ordered} | {prior.id for prior in priors}
     absorbed |= {alt for prior in priors for alt in prior.alt_ids}
+    if priors:
+        primary.id = min(priors, key=lambda prior: (prior.first_seen or "", prior.id)).id
     primary.alt_ids = sorted(absorbed - {primary.id})
     return primary.finalize()
 

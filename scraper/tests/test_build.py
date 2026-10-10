@@ -84,6 +84,7 @@ def test_build_artifacts(tmp_path):
 
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
     assert meta["build_time"] == "2026-10-09T06:15:00Z" and len(meta["data_version"]) == 16
+    assert meta["format"] == 1
     assert meta["counts"]["total"] == 2 and meta["counts"]["by_status"] == {"open": 1, "forecasted": 1}
 
     agencies = json.loads((out / "agencies.json").read_text(encoding="utf-8"))

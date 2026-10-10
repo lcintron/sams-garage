@@ -1,15 +1,76 @@
 {
-  "name": "sbir-portal",
+  "name": "sams-garage",
   "version": "0.1.0",
+  "description": "SAM's Garage (Sg): every open and upcoming U.S. federal SBIR/STTR topic in one fast, searchable app, refreshed daily. PWA + Electron.",
   "private": true,
-  "description": "Static PWA that lists every open and upcoming U.S. federal SBIR/STTR topic, refreshed daily by GitHub Actions.",
   "license": "MIT",
+  "author": "Luis Cintron",
+  "homepage": "https://sg.luiscintron.com",
+  "main": "electron/main.js",
   "scripts": {
     "serve": "node serve.js 8091",
+    "start": "electron .",
+    "smoke": "electron . --smoke-test",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "release": "node scripts/release.js",
+    "version:show": "node scripts/release.js --show",
     "build": "python -m scraper build --out site/data",
     "scrape": "python -m scraper scrape --all",
     "scrape:quick": "python -m scraper scrape --all --limit 40",
     "test": "node --test \"site/tests/*.test.mjs\"",
     "dev": "npm run scrape:quick && npm run build && npm run serve"
+  },
+  "build": {
+    "appId": "local.samsgarage",
+    "productName": "SAM's Garage",
+    "files": [
+      "electron/**",
+      "site/**",
+      "!site/tests/**",
+      "!site/icons/make-icons.py",
+      "!site/package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "artifactName": "SAMs-Garage-${version}-${os}-${arch}.${ext}",
+    "icon": "site/icons/icon-512.png",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "site/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "maintainer": "Luis Cintron"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
   }
 }

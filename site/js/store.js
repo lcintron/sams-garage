@@ -4,7 +4,8 @@
  * working with in-memory state. No DOM access; the backing storage can be swapped for tests with useStorage().
  */
 
-const PREFIX = 'sbir.';
+const PREFIX = 'sg.';
+const LEGACY_PREFIX = 'sbir.'; // the app's keys when it was called SBIR Portal
 const memory = new Map();
 const memoryStorage = {
   getItem: k => (memory.has(k) ? memory.get(k) : null),
@@ -20,15 +21,33 @@ function storage() {
     const probe = PREFIX + 'probe';
     ls.setItem(probe, '1');
     ls.removeItem(probe);
-    backend = ls;
+    backend = migrateLegacy(ls);
   } catch {
     backend = memoryStorage;
   }
   return backend;
 }
 
-/** Replace the backing storage (tests). Pass null to re-detect. */
-export function useStorage(s) { backend = s; }
+/**
+ * Move the SBIR Portal keys (sbir.<k>) to sg.<k>: each is copied when sg.<k> does not exist yet, then removed.
+ * Runs once, when the storage is first used. Returns the storage.
+ */
+export function migrateLegacy(s) {
+  try {
+    if (typeof s.key !== 'function') return s;
+    const old = [];
+    for (let i = 0; i < s.length; i++) { const k = s.key(i); if (k && k.startsWith(LEGACY_PREFIX)) old.push(k); }
+    for (const k of old) {
+      const next = PREFIX + k.slice(LEGACY_PREFIX.length);
+      if (s.getItem(next) == null) s.setItem(next, s.getItem(k));
+      s.removeItem(k);
+    }
+  } catch { /* storage blocked or full: keep going with what is there */ }
+  return s;
+}
+
+/** Replace the backing storage (tests); it is migrated like a real one. Pass null to re-detect. */
+export function useStorage(s) { backend = s ? migrateLegacy(s) : null; }
 
 export function get(key, fallback = null) {
   try {
@@ -50,6 +69,7 @@ export function remove(key) {
 // ---------- watchlist ----------
 export function watchlist() { const w = get('watchlist', []); return new Set(Array.isArray(w) ? w : []); }
 export function isWatched(id) { return watchlist().has(id); }
+export function setWatchlist(ids) { set('watchlist', [...ids].sort()); }
 /** Toggle an id; returns the new watched state. */
 export function toggleWatch(id) {
   const w = watchlist();

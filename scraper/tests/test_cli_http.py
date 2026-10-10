@@ -91,5 +91,7 @@ def test_http_does_not_retry_client_errors():
 
 
 def test_user_agent_identifies_the_project(monkeypatch):
-    monkeypatch.setenv("GITHUB_REPOSITORY", "someone/sbir-portal")
-    assert user_agent().startswith("SBIR-Portal/") and "github.com/someone/sbir-portal" in user_agent()
+    monkeypatch.setenv("GITHUB_REPOSITORY", "someone/sams-garage")
+    assert user_agent().startswith("SAMs-Garage/") and "github.com/someone/sams-garage" in user_agent()
+    monkeypatch.delenv("GITHUB_REPOSITORY")
+    assert "(+https://github.com/lcintron/sams-garage; SBIR/STTR opportunity index; data refresh bot)" in user_agent()

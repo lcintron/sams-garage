@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Minimal static server for the SBIR Portal (no dependencies). Serves site/. Usage: node serve.js [port] */
+/* Minimal static server for SAM's Garage (no dependencies). Serves site/. Usage: node serve.js [port] */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -25,4 +25,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   });
-}).listen(port, () => console.log(`SBIR Portal running at http://localhost:${port}/`));
+}).listen(port, () => console.log(`SAM's Garage running at http://localhost:${port}/`));

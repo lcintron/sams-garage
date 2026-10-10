@@ -1,54 +1,74 @@
 name: Deploy site
 
-# Rebuild site/data from the committed database and redeploy GitHub Pages whenever the site, the
-# scraper or the data changes on main (no scraping here; scrape.yml does that daily).
+# Publishes GitHub Pages on demand: a stable release's code (the latest one by default, or the vX.Y.Z tag given)
+# with today's data (data/ on main), assembled by scripts/assemble-site.sh. The Release workflow already deploys
+# the site for every stable release and scrape.yml redeploys it with fresh data every day; use this to roll back
+# to an older release or to redeploy without releasing. Branches and pre-release tags are never published.
 # Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'site/**'
-      - 'scraper/**'
-      - 'data/**'
-      - 'requirements.txt'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Stable release tag to deploy, e.g. v1.2.3 (empty = the latest stable release, or main while there is none)
+        required: false
+        default: ''
+
+env:
+  # The public site's address (link previews, the desktop app's shared links): scripts/site-url.sh.
+  # Change to https://sg.luiscintron.com/ once the custom domain is set up in Settings -> Pages.
+  SITE_URL: https://lcintron.github.io/sams-garage/
 
 permissions:
   contents: read
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  build-deploy:
-    name: Build site data and deploy Pages
+  deploy:
+    name: Deploy ${{ inputs.ref || 'the latest release' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       pages: write
       id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0   # every tag and the newest main, for scripts/assemble-site.sh
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements.txt
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Build site data
-        run: python -m scraper build --out site/data
-      - name: Drop development-only files from the Pages artifact
-        # The checkout is throwaway; the repository keeps these files.
-        run: rm -rf site/tests site/icons/make-icons.py site/package.json
+      - name: Check input
+        # The input reaches the shell only through an env var and is allowlisted here.
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if [ -z "$REF" ]; then exit 0; fi   # the latest stable release (scripts/assemble-site.sh decides)
+          if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::ref must be empty or a stable release tag such as v1.2.3 (got '$REF'); branches and pre-releases are not deployed."
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/$REF^{commit}" >/dev/null; then
+            echo "::error::No release tag '$REF' in this repository."
+            exit 1
+          fi
+      - name: Assemble site (release code + today's data)
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          bash scripts/assemble-site.sh "${REF:+refs/tags/$REF}" origin/main _site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v5

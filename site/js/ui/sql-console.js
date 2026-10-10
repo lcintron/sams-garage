@@ -115,5 +115,5 @@ function table({ columns, rows }) {
     })))));
 }
 
-function sessionGet() { try { return sessionStorage.getItem('sbir.sql') || ''; } catch { return ''; } }
-function sessionSet(v) { try { sessionStorage.setItem('sbir.sql', v); } catch { /* ignore */ } }
+function sessionGet() { try { return sessionStorage.getItem('sg.sql') || ''; } catch { return ''; } }
+function sessionSet(v) { try { sessionStorage.setItem('sg.sql', v); } catch { /* ignore */ } }

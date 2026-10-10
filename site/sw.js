@@ -1,12 +1,14 @@
-/* SBIR Portal service worker: offline app shell + cached data (PLAN.md §6). */
-const VERSION = 'sbir-portal-0.1.0'; // bump on every release that changes shell files
+/* SAM's Garage service worker: offline app shell + cached data (PLAN.md §6). */
+const VERSION = 'sg-0.1.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
-const DATA_CACHE = 'sbir-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
+const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
+// Data caches of earlier names, moved into DATA_CACHE on activate (SBIR Portal was the app's name before).
+const LEGACY_DATA_CACHES = ['sbir-data'];
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './css/app.css',
-  './js/app.js', './js/data.js', './js/search.js', './js/filters.js', './js/profiles.js', './js/store.js', './js/sql.js', './js/export.js',
+  './js/app.js', './js/config.js', './js/ids.js', './js/data.js', './js/search.js', './js/filters.js', './js/profiles.js', './js/store.js', './js/sql.js', './js/export.js',
   './js/ui/dom.js', './js/ui/toast.js', './js/ui/list.js', './js/ui/detail.js', './js/ui/filters-panel.js', './js/ui/stats.js',
   './js/ui/profiles-dialog.js', './js/ui/sql-console.js', './js/ui/about.js',
   './vendor/minisearch/minisearch.js',
@@ -26,9 +28,41 @@ self.addEventListener('install', e => {
     .then(() => self.skipWaiting()));
 });
 
+/**
+ * Copy every data entry of a legacy data cache into DATA_CACHE (entries already there win), so offline data
+ * survives the rename too. The old app may have lived under another path, so each entry is filed under this
+ * worker's scope: everything from "data/" on (query included) is kept, e.g. /sbir/data/catalog.json ->
+ * <scope>data/catalog.json; entries outside a data/ folder are dropped. Returns the legacy caches that could not
+ * be copied: they are kept for the next activation.
+ */
+async function adoptLegacyData(keys) {
+  const keep = new Set();
+  for (const name of LEGACY_DATA_CACHES.filter(n => keys.includes(n))) {
+    try {
+      const from = await caches.open(name);
+      const to = await caches.open(DATA_CACHE);
+      for (const req of await from.keys()) {
+        const old = new URL(req.url);
+        const at = old.pathname.indexOf('/data/');
+        if (at < 0) continue;
+        const url = new URL(old.pathname.slice(at + 1) + old.search, self.registration.scope).href;
+        if (await to.match(url)) continue;
+        const res = await from.match(req);
+        if (res) await to.put(url, res);
+      }
+    } catch {
+      keep.add(name);
+    }
+  }
+  return keep;
+}
+
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== DATA_CACHE).map(k => caches.delete(k))))
+    .then(async keys => {
+      const keep = await adoptLegacyData(keys);
+      await Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== DATA_CACHE && !keep.has(k)).map(k => caches.delete(k)));
+    })
     .then(() => self.clients.claim()));
 });
 

@@ -176,14 +176,83 @@ def test_dedupe_when_dsip_appears_after_sbir_gov_preserves_first_seen():
     db.run(DAY1, sbir_gov=ok("sbir_gov", sbir))
     dsip = make_record("dod_dsip", "N252-001", topic_number="N252-001")
     events = db.run(DAY2, sbir_gov=ok("sbir_gov", sbir), dod_dsip=ok("dod_dsip", dsip))
-    assert set(db.records) == {"dsip:N252-001"}
-    record = db.records["dsip:N252-001"]
-    assert record.alt_ids == ["sbirgov:13020"]
+    # The id stays the one already published; the content now comes from DSIP, the preferred source.
+    assert set(db.records) == {"sbirgov:13020"}
+    record = db.records["sbirgov:13020"]
+    assert record.source == "dod_dsip" and record.alt_ids == ["dsip:N252-001"]
     assert record.first_seen == "2026-10-09T06:15:00Z"
     assert all(event["event"] != "new" for event in events)
-    # Next day DSIP fails: the sbir.gov hit still maps onto the canonical DSIP record via alt_ids.
+    # Next day DSIP fails: its stale snapshot and the sbir.gov hit still map onto the same record.
     assert db.run(DAY3, sbir_gov=ok("sbir_gov", sbir), dod_dsip=failed("dod_dsip")) == []
-    assert set(db.records) == {"dsip:N252-001"} and db.records["dsip:N252-001"].last_seen == "2026-10-11"
+    assert set(db.records) == {"sbirgov:13020"} and db.records["sbirgov:13020"].last_seen == "2026-10-11"
+
+
+def test_id_stays_when_the_first_source_drops_the_record():
+    db = Db()
+    dsip = make_record("dod_dsip", "DON27BZ01-NV003", topic_number="DON27BZ01-NV003")
+    sbir = make_record("sbir_gov", "13020", topic_number="DON27BZ01-NV003", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    other = make_record("dod_dsip", "OTHER-1", topic_number="OTHER-1")
+    db.run(DAY1, dod_dsip=ok("dod_dsip", dsip, other), sbir_gov=ok("sbir_gov", sbir))
+    assert set(db.records) == {"dsip:DON27BZ01-NV003", "dsip:OTHER-1"}
+    # Day 2: DSIP runs fine but no longer lists the topic; sbir.gov still does.
+    events = db.run(DAY2, dod_dsip=ok("dod_dsip", other), sbir_gov=ok("sbir_gov", sbir))
+    assert set(db.records) == {"dsip:DON27BZ01-NV003", "dsip:OTHER-1"}
+    record = db.records["dsip:DON27BZ01-NV003"]
+    assert record.source == "sbir_gov" and record.alt_ids == ["sbirgov:13020"]
+    assert record.first_seen == "2026-10-09T06:15:00Z" and record.last_seen == "2026-10-10"
+    assert all(event["event"] != "new" for event in events)
+    # Day 3: DSIP lists it again: same id, content from DSIP again.
+    events = db.run(DAY3, dod_dsip=ok("dod_dsip", dsip, other), sbir_gov=ok("sbir_gov", sbir))
+    assert set(db.records) == {"dsip:DON27BZ01-NV003", "dsip:OTHER-1"}
+    assert db.records["dsip:DON27BZ01-NV003"].source == "dod_dsip"
+    assert all(event["event"] != "new" for event in events)
+
+
+def test_a_kept_id_still_dedupes_a_source_that_appears_later():
+    # dsip:X keeps its id while sbir.gov feeds it; a third source listing the same topic joins it.
+    db = Db()
+    dsip = make_record("dod_dsip", "DON27BZ01-NV003", topic_number="DON27BZ01-NV003")
+    sbir = make_record("sbir_gov", "13020", topic_number="DON27BZ01-NV003", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    other = make_record("dod_dsip", "OTHER-1", topic_number="OTHER-1")
+    db.run(DAY1, dod_dsip=ok("dod_dsip", dsip, other), sbir_gov=ok("sbir_gov", sbir))
+    db.run(DAY2, dod_dsip=ok("dod_dsip", other), sbir_gov=ok("sbir_gov", sbir))
+    assert db.records["dsip:DON27BZ01-NV003"].source == "sbir_gov"
+    grants = make_record("grants_gov", "777", topic_number="DON27BZ01-NV003")
+    events = db.run(DAY3, dod_dsip=ok("dod_dsip", other), sbir_gov=ok("sbir_gov", sbir), grants_gov=ok("grants_gov", grants))
+    assert set(db.records) == {"dsip:DON27BZ01-NV003", "dsip:OTHER-1"}
+    assert db.records["dsip:DON27BZ01-NV003"].alt_ids == ["grants:777", "sbirgov:13020"]
+    assert all(event["event"] != "new" for event in events)
+
+
+def test_two_published_records_that_come_together_keep_the_first_published_id():
+    # sbirgov:Y (day 1) and dsip:X (day 2) are separate records with different topic numbers; on day 3 DSIP
+    # corrects its topic number to sbir.gov's, and they share a key: the id published first wins.
+    db = Db()
+    sbir = make_record("sbir_gov", "13020", topic_number="N252-001", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    db.run(DAY1, sbir_gov=ok("sbir_gov", sbir))
+    dsip = make_record("dod_dsip", "N252-001X", topic_number="N252-999")
+    db.run(DAY2, sbir_gov=ok("sbir_gov", sbir), dod_dsip=ok("dod_dsip", dsip))
+    assert set(db.records) == {"sbirgov:13020", "dsip:N252-001X"}
+    fixed = make_record("dod_dsip", "N252-001X", topic_number="N252-001")
+    events = db.run(DAY3, sbir_gov=ok("sbir_gov", sbir), dod_dsip=ok("dod_dsip", fixed))
+    assert set(db.records) == {"sbirgov:13020"}
+    record = db.records["sbirgov:13020"]
+    assert record.source == "dod_dsip" and record.alt_ids == ["dsip:N252-001X"]
+    assert record.first_seen == "2026-10-09T06:15:00Z"
+    assert all(event["event"] != "new" for event in events)
+
+
+def test_an_already_rekeyed_record_keeps_its_published_id():
+    # Published as sbirgov:13020 after absorbing dsip:X (the old rule): it does not flip back when DSIP returns.
+    db = Db()
+    sbir = make_record("sbir_gov", "13020", topic_number="DON27BZ01-NV003", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    db.run(DAY1, sbir_gov=ok("sbir_gov", sbir))
+    db.records["sbirgov:13020"].alt_ids = ["dsip:DON27BZ01-NV003"]
+    dsip = make_record("dod_dsip", "DON27BZ01-NV003", topic_number="DON27BZ01-NV003")
+    events = db.run(DAY2, dod_dsip=ok("dod_dsip", dsip), sbir_gov=ok("sbir_gov", sbir))
+    assert set(db.records) == {"sbirgov:13020"} and db.records["sbirgov:13020"].source == "dod_dsip"
+    assert db.records["sbirgov:13020"].alt_ids == ["dsip:DON27BZ01-NV003"]
+    assert all(event["event"] != "new" for event in events)
 
 
 def test_same_source_records_sharing_a_topic_number_are_not_merged():

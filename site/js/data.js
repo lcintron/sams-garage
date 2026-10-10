@@ -6,7 +6,9 @@
  * "?v=<data_version>" so a new data version is a cache miss, and purgeStaleData() removes older versions.
  */
 
-export const DATA_CACHE = 'sbir-data'; // must match sw.js
+export const DATA_CACHE = 'sg-data'; // must match sw.js
+// The site data format this app reads (meta.json "format"; scraper/build.py SITE_FORMAT). Newer data is not loaded.
+export const DATA_FORMAT = 1;
 const BASE = 'data/';
 
 export class DataError extends Error {
@@ -31,8 +33,38 @@ async function getJSON(path, init) {
 /** File name for a record: ":" -> "__" (PLAN.md §5). */
 export function idSafe(id) { return String(id).replace(/:/g, '__'); }
 
-/** Meta: always try the network first (the SW falls back to its cached copy). */
-export function loadMeta() { return getJSON('meta.json', { cache: 'no-cache' }); }
+const META_TIMEOUT_MS = 8000;
+
+/**
+ * Meta: always the network first (the SW falls back to its cached copy when offline). A request that has not
+ * answered within timeoutMs (a stalled network) is aborted; then, or after any other failure, the copy of meta.json
+ * in the data cache is used. Rejects only when there is neither.
+ */
+export async function loadMeta({ timeoutMs = META_TIMEOUT_MS } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return await getJSON('meta.json', { cache: 'no-cache', signal: ctl.signal });
+  } catch (err) {
+    const kept = await cachedMeta();
+    if (kept) return kept;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The meta.json kept in the data cache (any ?v=), or null. */
+export async function cachedMeta() {
+  if (!globalThis.caches) return null;
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    const res = await cache.match(BASE + 'meta.json', { ignoreSearch: true });
+    return res ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Catalog, index docs, agencies. `fresh` bypasses the SW's stale copy (used after a data_version change). */
 export function loadCatalog(fresh = false) { return getJSON('catalog.json', fresh ? { cache: 'no-store' } : undefined); }
@@ -66,6 +98,20 @@ export async function purgeStaleData(version) {
     }).map(req => cache.delete(req)));
   } catch { /* ignore */ }
 }
+
+/**
+ * Whether an app that reads data format `supported` may use the data meta describes. A format that is newer, or
+ * not a whole number, is not. No format in meta means the first one. No meta at all (undefined or null) is allowed
+ * on purpose: loadMeta returns no meta only when neither the network nor the data cache has one, which is a first
+ * visit while offline, when there is no data to misread either.
+ */
+export function shouldUseData(meta, supported = DATA_FORMAT) {
+  const f = meta && meta.format;
+  return f == null || (Number.isInteger(f) && f <= supported);
+}
+
+/** Whether this app reads the data meta describes. */
+export function formatSupported(meta) { return shouldUseData(meta, DATA_FORMAT); }
 
 /** Version string from meta, tolerant of naming. */
 export function metaVersion(meta) {

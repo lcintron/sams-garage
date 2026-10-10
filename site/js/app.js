@@ -1,5 +1,5 @@
 /*
- * SBIR Portal — boot, routing and glue.
+ * SAM's Garage — boot, routing and glue.
  *
  * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/about
  * Filters live in the hash query (#/?q=uas&agency=DOD) so every view is shareable (filters.js).
@@ -19,6 +19,8 @@ import {
 import * as data from './data.js';
 import { toCSV, toJSON, download, exportName } from './export.js';
 import { $, h, encodeId } from './ui/dom.js';
+import { publicBase, topicLink } from './config.js';
+import { aliasMap, resolveId, migrateWatchlist } from './ids.js';
 import { toast } from './ui/toast.js';
 import { createList } from './ui/list.js';
 import { renderDetail, renderMissing } from './ui/detail.js';
@@ -26,13 +28,15 @@ import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.0'; // app version; bump via scripts/release.js
+const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
 const WIDE = window.matchMedia('(min-width: 1280px)');   // filters as a column (else a drawer)
 const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side by side (else detail full-screen)
 
 const app = {
   catalog: [],
   byId: new Map(),
+  aliasOf: new Map(),         // old id (an alt_id) -> the record's id now (js/ids.js)
   meta: null,
   version: '',
   agencies: data.agencyInfo(null),
@@ -166,7 +170,7 @@ function refresh({ keepScroll = false } = {}) {
 }
 
 function setListTitle() {
-  document.title = (app.listMode === 'watch' ? 'Watchlist' : app.state.q ? `“${app.state.q}”` : 'Open topics') + ' · SBIR Portal';
+  document.title = (app.listMode === 'watch' ? 'Watchlist' : app.state.q ? `“${app.state.q}”` : 'Open topics') + " · SAM's Garage";
 }
 
 function emptyState() {
@@ -195,6 +199,19 @@ function toggleWatch(id) {
 
 // ---------- routing ----------
 
+/**
+ * A topic route whose id another record has absorbed (an old link, or the catalog was refreshed while the topic
+ * was open): point it at that record and put its id in the address, keeping the filters.
+ */
+function followAlias(route = app.route) {
+  if (route.name !== 'detail' || !app.loaded) return;
+  const now = resolveId(route.id, app.byId, app.aliasOf);
+  if (now && now !== route.id) {
+    route.id = now;
+    history.replaceState(null, '', buildHash('/s/' + encodeId(now), app.state));
+  }
+}
+
 function parseRoute(path) {
   if (path === '/' || path === '') return { name: 'list', id: null, mode: 'all' };
   if (path === '/watch') return { name: 'list', id: null, mode: 'watch' };
@@ -215,6 +232,7 @@ async function onHashChange() {
   const stateChanged = toQuery(parseQuery(query)) !== toQuery(app.state);
   if (stateChanged) app.state = parseQuery(query);
   if (route.mode) app.listMode = route.mode;
+  followAlias(route); // an old id in a link or bookmark: that record, under its id now
   app.route = route;
   if (el.q.value.trim() !== app.state.q && document.activeElement !== el.q) el.q.value = app.state.q;
 
@@ -231,14 +249,14 @@ async function onHashChange() {
   closeDrawer();
 
   if (view === 'sql') {
-    document.title = 'SQL console · SBIR Portal';
+    document.title = "SQL console · SAM's Garage";
     await app.metaReady;
     const { showSqlConsole } = await import('./ui/sql-console.js');
     showSqlConsole(el.sqlView, { url: data.sqliteURL(app.version), version: app.version || 'none' });
     return;
   }
   if (view === 'about') {
-    document.title = 'About · SBIR Portal';
+    document.title = "About · SAM's Garage";
     renderAboutView();
     return;
   }
@@ -263,8 +281,8 @@ async function showDetail(id, prevRoute) {
   const token = ++detailToken;
   if (!app.loaded) { el.detail.replaceChildren(h('div', { class: 'd-wrap' }, h('div', { class: 'loading-line' }), h('div', { class: 'loading-line' }))); return; }
   const rec = app.byId.get(id);
-  if (!rec) { renderMissing(el.detail, id, backHref()); document.title = 'Not found · SBIR Portal'; el.detail.querySelector('h2')?.focus(); return; }
-  document.title = (rec.topic_number ? rec.topic_number + ' · ' : '') + (rec.title || id) + ' · SBIR Portal';
+  if (!rec) { renderMissing(el.detail, id, backHref()); document.title = "Not found · SAM's Garage"; el.detail.querySelector('h2')?.focus(); return; }
+  document.title = (rec.topic_number ? rec.topic_number + ' · ' : '') + (rec.title || id) + " · SAM's Garage";
   const result = app.results.find(r => r.rec.id === id);
   const opts = full => ({
     full,
@@ -280,7 +298,7 @@ async function showDetail(id, prevRoute) {
       if (star) star.setAttribute('aria-pressed', on ? 'true' : 'false');
       return on;
     },
-    onCopyLink: () => copyText(location.href.split('#')[0] + '#/s/' + encodeId(id), 'Link copied'),
+    onCopyLink: () => copyText(topicLink(publicBase(), id), 'Link copied'), // the desktop app links to the public site
     onExport: r => download(`${data.idSafe(r.id)}.json`, toJSON(r), 'application/json')
   });
   const sameRecord = prevRoute && prevRoute.name === 'detail' && prevRoute.id === id;
@@ -318,6 +336,10 @@ function renderAboutView() {
 function setCatalog(catalog) {
   app.catalog = Array.isArray(catalog) ? catalog.filter(r => r && r.id) : [];
   app.byId = new Map(app.catalog.map(r => [r.id, r]));
+  app.aliasOf = aliasMap(app.catalog);
+  // starred topics saved under an id another record has since absorbed follow that record
+  const watch = migrateWatchlist(store.watchlist(), app.byId, app.aliasOf);
+  if (watch.changed) store.setWatchlist(watch.ids);
   recomputeProfileScores();
   app.loaded = true;
 }
@@ -325,11 +347,26 @@ function setCatalog(catalog) {
 async function loadAll() {
   let resolveMeta;
   app.metaReady = new Promise(r => { resolveMeta = r; });
+  // All three start at once, but nothing from the catalog or agencies is used before meta.json has settled (the
+  // loading skeleton stays meanwhile), so an installed app never renders data newer than it reads. loadMeta gives
+  // up on a stalled network after a few seconds and then uses the copy of meta.json in the data cache; with
+  // neither (a first visit while offline, when the catalog cannot load either) the app goes ahead ungated.
   const metaP = data.loadMeta().then(m => { app.meta = m; app.version = data.metaVersion(m); return m; }).catch(() => null).finally(() => resolveMeta());
-  const agenciesP = data.loadAgencies().then(a => { app.agencies = data.agencyInfo(a); });
+  const catalogP = data.loadCatalog();
+  catalogP.catch(() => {}); // handled below
+  const agenciesP = data.loadAgencies();
+  // The desktop app is exempt (and does not wait): electron/protocol.js only serves it data in a format it reads.
+  const early = DESKTOP ? null : await metaP;
+  if (!DESKTOP && !data.shouldUseData(early)) {
+    await onHashChange();
+    showNewerDataNotice();
+    renderFreshness(el.freshness, early, app.offline);
+    app.lastMetaCheck = Date.now();
+    return;
+  }
 
   try {
-    setCatalog(await data.loadCatalog());
+    setCatalog(await catalogP);
   } catch (err) {
     app.loaded = false;
     const notBuilt = err.status === 404;
@@ -343,7 +380,7 @@ async function loadAll() {
     metaP.then(m => renderFreshness(el.freshness, m, app.offline));
     return;
   }
-  await agenciesP.catch(() => {});
+  app.agencies = data.agencyInfo(await agenciesP);
   await onHashChange();
   scheduleIndex();
 
@@ -353,8 +390,47 @@ async function loadAll() {
   if (meta) await checkVersion(meta);
 }
 
+/** The published data is newer than this version reads: no list, a notice and a way to update. */
+function showNewerDataNotice() {
+  el.count.textContent = 'Update needed';
+  el.indexState.textContent = '';
+  el.list.replaceChildren(h('div', { class: 'empty' },
+    h('p', { text: "A newer version of SAM's Garage is needed for the latest data." }),
+    h('button', { class: 'btn small primary', type: 'button', text: 'Reload', onclick: updateAndReload })));
+}
+
+/** Fetch the new version of the app (its service worker), let it take over, then reload. */
+async function updateAndReload() {
+  try {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) {
+      await reg.update();
+      const next = reg.installing || reg.waiting;
+      if (next) {
+        await new Promise(resolve => {
+          const t = setTimeout(resolve, 8000);
+          const check = () => { if (next.state === 'activated' || next.state === 'redundant') { clearTimeout(t); resolve(); } };
+          next.addEventListener('statechange', check);
+          if (next.state === 'installed') next.postMessage({ type: 'SKIP_WAITING' });
+          check();
+        });
+      }
+    }
+  } catch { /* offline or no worker: a plain reload */ }
+  location.reload();
+}
+
+/** Newer data than this version of the app reads: keep what is shown and ask for an update. */
+function newerFormat(meta) {
+  if (data.formatSupported(meta)) return false;
+  if (!app.loaded) return true; // nothing shown yet: the list already says so (showNewerDataNotice)
+  toast('Update the app to load the newest data.', { id: 'format', timeout: 0 });
+  return true;
+}
+
 /** Compare meta's data_version with the one the cached catalog belongs to; refetch and say so when it changed. */
 async function checkVersion(meta) {
+  if (newerFormat(meta)) return;
   const v = data.metaVersion(meta);
   const stored = store.dataVersion();
   if (!v) return;
@@ -367,6 +443,7 @@ async function checkVersion(meta) {
       app.descriptions = null;
       app.indexState = 'idle';
       scheduleIndex(true);
+      followAlias();
       refresh({ keepScroll: true });
       if (app.route.name === 'detail') showDetail(app.route.id, app.route);
       toast('Data updated — ' + app.catalog.length.toLocaleString() + ' records', { id: 'data' });
@@ -392,7 +469,8 @@ function scheduleIndex(fresh = false) {
       recomputeProfileScores();
       app.indexState = 'ready';
       el.indexState.textContent = '';
-      console.debug(`[sbir] indexed ${docs.length} docs in ${(performance.now() - t0).toFixed(0)} ms`);
+      console.debug(`[sg] indexed ${docs.length} docs in ${(performance.now() - t0).toFixed(0)} ms`);
+      followAlias();
       if (app.state.q || app.state.profile.length || app.listMode === 'all') refresh({ keepScroll: true });
       if (app.route.name === 'detail') list.select(app.route.id);
     } catch (err) {
@@ -449,6 +527,11 @@ function syncThemeUi() {
   el.themeBtn.title = `Switch to ${next} theme`;
   el.themeBtn.setAttribute('aria-label', `Switch to ${next} theme`);
   $('meta[name="theme-color"]').setAttribute('content', cur === 'dark' ? '#0b1118' : '#ffffff');
+  // Desktop app: the window buttons drawn over the top bar take the bar's colors.
+  if (DESKTOP && DESKTOP.setTitleBarColors) {
+    const css = getComputedStyle(document.documentElement);
+    DESKTOP.setTitleBarColors({ color: css.getPropertyValue('--bg-2').trim(), symbolColor: css.getPropertyValue('--text').trim() });
+  }
 }
 
 function openDrawer() {
@@ -493,7 +576,7 @@ async function copyText(text, okMsg) {
 function exportResults(kind) {
   const recs = app.results.map(r => r.rec);
   if (!recs.length) { toast('Nothing to export'); return; }
-  const base = app.listMode === 'watch' ? 'sbir-watchlist' : 'sbir-topics';
+  const base = app.listMode === 'watch' ? 'sg-watchlist' : 'sg-topics';
   if (kind === 'csv') download(exportName('csv', todayISO(), base), toCSV(recs), 'text/csv;charset=utf-8');
   else download(exportName('json', todayISO(), base), toJSON(recs), 'application/json');
   toast(`Exported ${recs.length.toLocaleString()} ${recs.length === 1 ? 'topic' : 'topics'} as ${kind.toUpperCase()}`);
@@ -592,12 +675,13 @@ function setupPwa() {
   });
   window.addEventListener('appinstalled', () => { el.installBtn.classList.add('hidden'); toast('Installed'); });
 
-  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  // The desktop app has no service worker: its files are on disk and it keeps the data fresh itself (electron/).
+  if (DESKTOP || !('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
   const sw = navigator.serviceWorker;
   const hadController = !!sw.controller; // the first install also takes control: that is not an update
   sw.addEventListener('controllerchange', () => {
     if (!hadController) return;
-    toast('A new version of SBIR Portal is ready.', { action: 'Reload', onAction: () => location.reload(), timeout: 0, id: 'update' });
+    toast("A new version of SAM's Garage is ready.", { action: 'Reload', onAction: () => location.reload(), timeout: 0, id: 'update' });
   });
   sw.register('sw.js').then(reg => {
     // a worker waiting from an older tab: let it take over (it calls skipWaiting itself, this is belt and braces)

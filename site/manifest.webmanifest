@@ -1,7 +1,7 @@
 {
-  "name": "SBIR Portal",
-  "short_name": "SBIR Portal",
-  "description": "Search every open and upcoming U.S. federal SBIR/STTR topic and solicitation, refreshed daily. Works offline.",
+  "name": "SAM's Garage",
+  "short_name": "Sg",
+  "description": "SAM's Garage (Sg): search every open and upcoming U.S. federal SBIR/STTR topic and solicitation, refreshed daily. Works offline.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

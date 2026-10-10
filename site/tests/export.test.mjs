@@ -47,5 +47,5 @@ test('toJSON and helpers', () => {
   assert.deepEqual(JSON.parse(toJSON([r])), [r]);
   assert.equal(primaryLink(rec({ source: 'dod_dsip', links: { dod_dsip: 'https://d', official: null } })), 'https://d');
   assert.equal(primaryLink(rec({ links: {} })), '');
-  assert.equal(exportName('csv', '2026-10-09'), 'sbir-topics-2026-10-09.csv');
+  assert.equal(exportName('csv', '2026-10-09'), 'sg-topics-2026-10-09.csv');
 });

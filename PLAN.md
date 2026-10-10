@@ -1,8 +1,9 @@
-# SBIR Portal — Build Plan
+# SAM's Garage (Sg) — Build Plan
 
-A static, installable web app (PWA) that lists every open and upcoming U.S. federal SBIR/STTR
-topic and solicitation, backed by a database that lives in this git repository, is refreshed
-daily by a GitHub Action, and is queried entirely in the browser from GitHub Pages.
+SAM's Garage (Sg), formerly "SBIR Portal", is a static, installable web app (PWA), also packaged as an
+Electron desktop app, that lists every open and upcoming U.S. federal SBIR/STTR topic and solicitation,
+backed by a database that lives in this git repository, is refreshed daily by a GitHub Action, and is
+queried entirely in the browser from GitHub Pages.
 
 Authored by Fable 5.1 (architect + reviewer). Built by Opus 5.5 subagents. Reviewed before merge.
 
@@ -58,13 +59,14 @@ Non-goals
 ├─ LICENSE                      MIT, "Luis Cintron"
 ├─ .gitignore                   site/data/, __pycache__, .venv, node_modules, dist, .pytest_cache
 ├─ requirements.txt             requests, beautifulsoup4, (pytest in requirements-dev.txt)
-├─ package.json                 scripts only: serve, build, scrape, scrape:quick, test (no runtime deps)
+├─ package.json                 scripts (serve, build, scrape, test, start, smoke, dist:*, release) + electron-builder config
 ├─ serve.js                     zero-dependency static server for site/ (copy of GenGIS pattern)
-├─ .claude/launch.json          {"name":"sbir-portal","runtimeExecutable":"node","runtimeArgs":["serve.js","8080"],"port":8080}
+├─ .claude/launch.json          {"name":"sams-garage","runtimeExecutable":"node","runtimeArgs":["serve.js","8091"],"port":8091}
 ├─ .github/workflows/
-│   ├─ scrape.yml               daily cron + manual: scrape → commit data/ → build → deploy Pages
-│   ├─ pages.yml                on push to main: build → deploy Pages (no scrape)
-│   └─ ci.yml                   on push/PR: pytest + node --test + build smoke test
+│   ├─ scrape.yml               daily cron + manual: scrape → commit data/ → deploy Pages (latest release + this data)
+│   ├─ release.yml              manual: semver tag → installers (Win/macOS/Linux) → GitHub Release → deploy Pages
+│   ├─ pages.yml                manual: redeploy the latest (or a given) release with today's data
+│   └─ ci.yml                   on push/PR: pytest + node --test + build and site-assembly smoke tests
 ├─ scraper/                     Python package (python -m scraper ...)
 │   ├─ __init__.py, __main__.py, cli.py
 │   ├─ model.py                 Record dataclass, normalization helpers, validate()
@@ -228,7 +230,7 @@ jobs:
 - The scrape step must exit 0 when one source fails but others succeed (record the failure in meta.json and a `::warning::`); exit non-zero only when all sources fail.
 - Never fail the deploy because nothing changed; still redeploy so `meta.json` build time is fresh (cheap).
 
-`pages.yml`: on push to `main` (paths: site/**, scraper/**, data/**, .github/workflows/pages.yml) and workflow_dispatch → same build-deploy job.
+`pages.yml`: workflow_dispatch only (optional `ref`, default the latest release tag). Since the SAM's Garage rename every deploy runs `scripts/assemble-site.sh`: the latest release's code with the newest data (see README "How the data stays fresh"); `release.yml` cuts releases (README "Releases").
 
 `ci.yml`: on push/PR → `pip install -r requirements-dev.txt && pytest -q`, `node --test site/tests`, and `python -m scraper build --out /tmp/site-data` from the committed data (smoke).
 
@@ -247,7 +249,7 @@ python -m scraper validate        # schema-check data/solicitations.jsonl
 `--limit N` caps records per source for quick local runs (and the workflow_dispatch input).
 Logging to stderr with per-source progress; final one-line summary to stdout.
 
-npm scripts: `serve` (node serve.js 8080), `build` (python -m scraper build), `scrape` (python -m scraper scrape --all), `scrape:quick` (… --limit 40), `test` (node --test site/tests), `dev` (scrape:quick && build && serve).
+npm scripts: `serve` (node serve.js 8091), `build` (python -m scraper build), `scrape` (python -m scraper scrape --all), `scrape:quick` (… --limit 40), `test` (node --test site/tests), `dev` (scrape:quick && build && serve).
 
 ---
 

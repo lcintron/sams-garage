@@ -53,8 +53,8 @@ export function toJSON(records) {
   return JSON.stringify(records, null, 2) + '\n';
 }
 
-/** A filename like "sbir-topics-2026-10-09.csv". */
-export function exportName(ext, today = new Date().toISOString().slice(0, 10), base = 'sbir-topics') {
+/** A filename like "sg-topics-2026-10-09.csv". */
+export function exportName(ext, today = new Date().toISOString().slice(0, 10), base = 'sg-topics') {
   return `${base}-${today}.${ext}`;
 }
 
