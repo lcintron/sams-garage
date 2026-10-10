@@ -110,7 +110,7 @@ try {
   }
   if (!pushed) {
     console.error(`Push failed: ${branch} moved on the remote during the release (or the push was refused). Nothing was pushed: re-run the release.`);
-    output({ released: 'false', tag: '', version: current });
+    output({ released: 'false', tag: '', version: '' }); // the workflow summary then points at this step's log
     process.exit(1);
   }
 }
