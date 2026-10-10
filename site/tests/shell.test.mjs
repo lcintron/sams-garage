@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as store from '../js/store.js';
-import { agencyInfo, idSafe, metaVersion, metaUpdated, formatSupported, shouldUseData, DATA_FORMAT } from '../js/data.js';
+import { agencyInfo, idSafe, metaVersion, metaUpdated, formatSupported, shouldUseData, DATA_FORMAT, loadMeta } from '../js/data.js';
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(site, f), 'utf8');
@@ -96,11 +96,34 @@ test('shouldUseData: only data in a format the app reads', () => {
   assert.equal(shouldUseData({ format: 1 }, 2), true, 'older data is fine');
   assert.equal(shouldUseData({ format: 2 }, 1), false);
   assert.equal(shouldUseData({}, 1), true, 'no format: the first one');
-  assert.equal(shouldUseData(null, 1), true, 'meta not loaded (offline, slow): go ahead');
-  assert.equal(shouldUseData(undefined, 1), true);
+  assert.equal(shouldUseData(null, 1), true, 'no meta anywhere (first visit offline): go ahead');
+  assert.equal(shouldUseData(undefined, 1), true, 'same for undefined');
   assert.equal(shouldUseData({ format: '2' }, 1), false);
   assert.equal(shouldUseData({ format: 1.5 }, 1), false);
   assert.equal(shouldUseData({ format: DATA_FORMAT }), true);
+});
+
+test('loadMeta: the network, else (failure or a stalled request) the copy in the data cache', async () => {
+  const realFetch = globalThis.fetch, realCaches = globalThis.caches;
+  const kept = { format: 9, v: 'kept' };
+  const cacheWith = meta => ({ open: async name => ({ match: async (url, opts) => (name === 'sg-data' && String(url).endsWith('data/meta.json') && opts?.ignoreSearch && meta ? new Response(JSON.stringify(meta)) : undefined) }) });
+  try {
+    globalThis.caches = cacheWith(kept);
+    globalThis.fetch = async () => new Response('{"format":1,"v":"net"}');
+    assert.equal((await loadMeta()).v, 'net');
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+    assert.equal((await loadMeta()).v, 'kept');
+    let aborted = false;
+    globalThis.fetch = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => { aborted = true; reject(new DOMException('aborted', 'AbortError')); }));
+    const t0 = Date.now();
+    assert.equal((await loadMeta({ timeoutMs: 50 })).v, 'kept');
+    assert.ok(aborted && Date.now() - t0 < 2000, 'the stalled request is aborted');
+    globalThis.caches = cacheWith(null);
+    await assert.rejects(loadMeta({ timeoutMs: 50 }));
+  } finally {
+    globalThis.fetch = realFetch;
+    if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+  }
 });
 
 test('data helpers', () => {

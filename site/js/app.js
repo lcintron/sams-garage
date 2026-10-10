@@ -344,19 +344,19 @@ function setCatalog(catalog) {
   app.loaded = true;
 }
 
-const META_WAIT_MS = 2500; // how long first paint waits for meta.json's format before going ahead without it
-
 async function loadAll() {
   let resolveMeta;
   app.metaReady = new Promise(r => { resolveMeta = r; });
-  // All three start at once; nothing from the catalog or agencies is used before meta.json's format is known
-  // (or META_WAIT_MS passed: offline, slow), so an installed app never renders data newer than it reads.
+  // All three start at once, but nothing from the catalog or agencies is used before meta.json has settled (the
+  // loading skeleton stays meanwhile), so an installed app never renders data newer than it reads. loadMeta gives
+  // up on a stalled network after a few seconds and then uses the copy of meta.json in the data cache; with
+  // neither (a first visit while offline, when the catalog cannot load either) the app goes ahead ungated.
   const metaP = data.loadMeta().then(m => { app.meta = m; app.version = data.metaVersion(m); return m; }).catch(() => null).finally(() => resolveMeta());
   const catalogP = data.loadCatalog();
   catalogP.catch(() => {}); // handled below
   const agenciesP = data.loadAgencies();
-  const early = await Promise.race([metaP, new Promise(r => setTimeout(r, META_WAIT_MS))]);
-  // The desktop app is exempt: electron/protocol.js already serves it only data in a format it reads.
+  // The desktop app is exempt (and does not wait): electron/protocol.js only serves it data in a format it reads.
+  const early = DESKTOP ? null : await metaP;
   if (!DESKTOP && !data.shouldUseData(early)) {
     await onHashChange();
     showNewerDataNotice();

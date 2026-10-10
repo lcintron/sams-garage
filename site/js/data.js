@@ -33,8 +33,38 @@ async function getJSON(path, init) {
 /** File name for a record: ":" -> "__" (PLAN.md §5). */
 export function idSafe(id) { return String(id).replace(/:/g, '__'); }
 
-/** Meta: always try the network first (the SW falls back to its cached copy). */
-export function loadMeta() { return getJSON('meta.json', { cache: 'no-cache' }); }
+const META_TIMEOUT_MS = 8000;
+
+/**
+ * Meta: always the network first (the SW falls back to its cached copy when offline). A request that has not
+ * answered within timeoutMs (a stalled network) is aborted; then, or after any other failure, the copy of meta.json
+ * in the data cache is used. Rejects only when there is neither.
+ */
+export async function loadMeta({ timeoutMs = META_TIMEOUT_MS } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return await getJSON('meta.json', { cache: 'no-cache', signal: ctl.signal });
+  } catch (err) {
+    const kept = await cachedMeta();
+    if (kept) return kept;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The meta.json kept in the data cache (any ?v=), or null. */
+export async function cachedMeta() {
+  if (!globalThis.caches) return null;
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    const res = await cache.match(BASE + 'meta.json', { ignoreSearch: true });
+    return res ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Catalog, index docs, agencies. `fresh` bypasses the SW's stale copy (used after a data_version change). */
 export function loadCatalog(fresh = false) { return getJSON('catalog.json', fresh ? { cache: 'no-store' } : undefined); }
@@ -70,8 +100,10 @@ export async function purgeStaleData(version) {
 }
 
 /**
- * Whether an app that reads data format `supported` may use the data meta describes. No meta (not loaded, e.g.
- * offline) or no format (the first one) is fine; a format that is newer, or not a whole number, is not.
+ * Whether an app that reads data format `supported` may use the data meta describes. A format that is newer, or
+ * not a whole number, is not. No format in meta means the first one. No meta at all (undefined or null) is allowed
+ * on purpose: loadMeta returns no meta only when neither the network nor the data cache has one, which is a first
+ * visit while offline, when there is no data to misread either.
  */
 export function shouldUseData(meta, supported = DATA_FORMAT) {
   const f = meta && meta.format;
