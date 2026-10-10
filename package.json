@@ -1,8 +1,8 @@
 {
-  "name": "sbir-portal",
+  "name": "sams-garage",
   "version": "0.1.0",
   "private": true,
-  "description": "Static PWA that lists every open and upcoming U.S. federal SBIR/STTR topic, refreshed daily by GitHub Actions.",
+  "description": "SAM's Garage (Sg): every open and upcoming U.S. federal SBIR/STTR topic in one fast, searchable app, refreshed daily. PWA + Electron.",
   "license": "MIT",
   "scripts": {
     "serve": "node serve.js 8091",

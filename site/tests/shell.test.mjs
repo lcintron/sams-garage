@@ -37,8 +37,8 @@ test('every js module and vendor file is precached', () => {
 test('sw.js has a VERSION and the data cache name matches data.js', () => {
   const src = read('sw.js');
   assert.match(src, /const VERSION = '[^']+'/);
-  assert.match(src, /const DATA_CACHE = 'sbir-data'/);
-  assert.match(read('js/data.js'), /DATA_CACHE = 'sbir-data'/);
+  assert.match(src, /const DATA_CACHE = 'sg-data'/);
+  assert.match(read('js/data.js'), /DATA_CACHE = 'sg-data'/);
 });
 
 test('manifest icons exist and include maskable ones', () => {
@@ -68,7 +68,7 @@ test('store falls back to memory and round-trips', () => {
   assert.deepEqual(store.savedSearches(), [{ name: 'UAS', query: 'profile=uas,cuas' }]);
   store.markVisit(123);
   assert.equal(store.lastVisit(), 123);
-  mem.set('sbir.watchlist', '{not json');
+  mem.set('sg.watchlist', '{not json');
   assert.equal(store.watchlist().size, 0, 'corrupt value -> fallback');
   store.useStorage({ getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() {} });
   assert.equal(store.set('x', 1), false);

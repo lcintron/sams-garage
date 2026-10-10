@@ -24,8 +24,8 @@ DEFAULT_TIMEOUT = 30.0
 def user_agent() -> str:
     """Descriptive UA. In GitHub Actions it names the repository so operators can reach the owner."""
     repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    contact = f"+https://github.com/{repo}" if repo else "+https://github.com/topics/sbir"
-    return f"SBIR-Portal/{__version__} ({contact}; SBIR/STTR opportunity index; data refresh bot)"
+    contact = f"+https://github.com/{repo}" if repo else "+https://github.com/lcintron/sams-garage"
+    return f"SAMs-Garage/{__version__} ({contact}; SBIR/STTR opportunity index; data refresh bot)"
 
 
 class HttpError(RuntimeError):

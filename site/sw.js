@@ -1,7 +1,7 @@
-/* SBIR Portal service worker: offline app shell + cached data (PLAN.md §6). */
-const VERSION = 'sbir-portal-0.1.0'; // bump on every release that changes shell files
+/* SAM's Garage service worker: offline app shell + cached data (PLAN.md §6). */
+const VERSION = 'sg-0.1.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
-const DATA_CACHE = 'sbir-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
+const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',

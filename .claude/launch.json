@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "sbir-portal",
+      "name": "sams-garage",
       "runtimeExecutable": "node",
       "runtimeArgs": ["serve.js", "8091"],
       "port": 8091

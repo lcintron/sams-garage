@@ -1,5 +1,5 @@
 /*
- * SBIR Portal — boot, routing and glue.
+ * SAM's Garage — boot, routing and glue.
  *
  * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/about
  * Filters live in the hash query (#/?q=uas&agency=DOD) so every view is shareable (filters.js).
@@ -166,7 +166,7 @@ function refresh({ keepScroll = false } = {}) {
 }
 
 function setListTitle() {
-  document.title = (app.listMode === 'watch' ? 'Watchlist' : app.state.q ? `“${app.state.q}”` : 'Open topics') + ' · SBIR Portal';
+  document.title = (app.listMode === 'watch' ? 'Watchlist' : app.state.q ? `“${app.state.q}”` : 'Open topics') + " · SAM's Garage";
 }
 
 function emptyState() {
@@ -231,14 +231,14 @@ async function onHashChange() {
   closeDrawer();
 
   if (view === 'sql') {
-    document.title = 'SQL console · SBIR Portal';
+    document.title = "SQL console · SAM's Garage";
     await app.metaReady;
     const { showSqlConsole } = await import('./ui/sql-console.js');
     showSqlConsole(el.sqlView, { url: data.sqliteURL(app.version), version: app.version || 'none' });
     return;
   }
   if (view === 'about') {
-    document.title = 'About · SBIR Portal';
+    document.title = "About · SAM's Garage";
     renderAboutView();
     return;
   }
@@ -263,8 +263,8 @@ async function showDetail(id, prevRoute) {
   const token = ++detailToken;
   if (!app.loaded) { el.detail.replaceChildren(h('div', { class: 'd-wrap' }, h('div', { class: 'loading-line' }), h('div', { class: 'loading-line' }))); return; }
   const rec = app.byId.get(id);
-  if (!rec) { renderMissing(el.detail, id, backHref()); document.title = 'Not found · SBIR Portal'; el.detail.querySelector('h2')?.focus(); return; }
-  document.title = (rec.topic_number ? rec.topic_number + ' · ' : '') + (rec.title || id) + ' · SBIR Portal';
+  if (!rec) { renderMissing(el.detail, id, backHref()); document.title = "Not found · SAM's Garage"; el.detail.querySelector('h2')?.focus(); return; }
+  document.title = (rec.topic_number ? rec.topic_number + ' · ' : '') + (rec.title || id) + " · SAM's Garage";
   const result = app.results.find(r => r.rec.id === id);
   const opts = full => ({
     full,
@@ -392,7 +392,7 @@ function scheduleIndex(fresh = false) {
       recomputeProfileScores();
       app.indexState = 'ready';
       el.indexState.textContent = '';
-      console.debug(`[sbir] indexed ${docs.length} docs in ${(performance.now() - t0).toFixed(0)} ms`);
+      console.debug(`[sg] indexed ${docs.length} docs in ${(performance.now() - t0).toFixed(0)} ms`);
       if (app.state.q || app.state.profile.length || app.listMode === 'all') refresh({ keepScroll: true });
       if (app.route.name === 'detail') list.select(app.route.id);
     } catch (err) {
@@ -493,7 +493,7 @@ async function copyText(text, okMsg) {
 function exportResults(kind) {
   const recs = app.results.map(r => r.rec);
   if (!recs.length) { toast('Nothing to export'); return; }
-  const base = app.listMode === 'watch' ? 'sbir-watchlist' : 'sbir-topics';
+  const base = app.listMode === 'watch' ? 'sg-watchlist' : 'sg-topics';
   if (kind === 'csv') download(exportName('csv', todayISO(), base), toCSV(recs), 'text/csv;charset=utf-8');
   else download(exportName('json', todayISO(), base), toJSON(recs), 'application/json');
   toast(`Exported ${recs.length.toLocaleString()} ${recs.length === 1 ? 'topic' : 'topics'} as ${kind.toUpperCase()}`);
@@ -597,7 +597,7 @@ function setupPwa() {
   const hadController = !!sw.controller; // the first install also takes control: that is not an update
   sw.addEventListener('controllerchange', () => {
     if (!hadController) return;
-    toast('A new version of SBIR Portal is ready.', { action: 'Reload', onAction: () => location.reload(), timeout: 0, id: 'update' });
+    toast("A new version of SAM's Garage is ready.", { action: 'Reload', onAction: () => location.reload(), timeout: 0, id: 'update' });
   });
   sw.register('sw.js').then(reg => {
     // a worker waiting from an older tab: let it take over (it calls skipWaiting itself, this is belt and braces)

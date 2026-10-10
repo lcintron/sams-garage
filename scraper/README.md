@@ -1,4 +1,4 @@
-# scraper — SBIR Portal data pipeline
+# scraper — SAM's Garage data pipeline
 
 `python -m scraper` fetches open and upcoming SBIR/STTR opportunities from three federal sources,
 merges them into the database committed under `data/`, and builds the static files the site reads
@@ -121,7 +121,7 @@ Records are never deleted.
 
 Politeness: every request goes through `scraper/http.py`, which provides:
 
-- a descriptive User-Agent, `SBIR-Portal/<version> (+https://github.com/<GITHUB_REPOSITORY>; …; data refresh bot)`
+- a descriptive User-Agent, `SAMs-Garage/<version> (+https://github.com/<GITHUB_REPOSITORY>; …; data refresh bot)` (outside GitHub Actions it names `lcintron/sams-garage`)
 - a timeout on every request
 - up to 3 attempts with exponential backoff on connection errors, 429 and 5xx responses (`Retry-After` is honored)
 - a global minimum gap between requests

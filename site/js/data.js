@@ -6,7 +6,7 @@
  * "?v=<data_version>" so a new data version is a cache miss, and purgeStaleData() removes older versions.
  */
 
-export const DATA_CACHE = 'sbir-data'; // must match sw.js
+export const DATA_CACHE = 'sg-data'; // must match sw.js
 const BASE = 'data/';
 
 export class DataError extends Error {

@@ -1,8 +1,9 @@
-# SBIR Portal — Build Plan
+# SAM's Garage (Sg) — Build Plan
 
-A static, installable web app (PWA) that lists every open and upcoming U.S. federal SBIR/STTR
-topic and solicitation, backed by a database that lives in this git repository, is refreshed
-daily by a GitHub Action, and is queried entirely in the browser from GitHub Pages.
+SAM's Garage (Sg), formerly "SBIR Portal", is a static, installable web app (PWA), also packaged as an
+Electron desktop app, that lists every open and upcoming U.S. federal SBIR/STTR topic and solicitation,
+backed by a database that lives in this git repository, is refreshed daily by a GitHub Action, and is
+queried entirely in the browser from GitHub Pages.
 
 Authored by Fable 5.1 (architect + reviewer). Built by Opus 5.5 subagents. Reviewed before merge.
 
@@ -60,7 +61,7 @@ Non-goals
 ├─ requirements.txt             requests, beautifulsoup4, (pytest in requirements-dev.txt)
 ├─ package.json                 scripts only: serve, build, scrape, scrape:quick, test (no runtime deps)
 ├─ serve.js                     zero-dependency static server for site/ (copy of GenGIS pattern)
-├─ .claude/launch.json          {"name":"sbir-portal","runtimeExecutable":"node","runtimeArgs":["serve.js","8080"],"port":8080}
+├─ .claude/launch.json          {"name":"sams-garage","runtimeExecutable":"node","runtimeArgs":["serve.js","8091"],"port":8091}
 ├─ .github/workflows/
 │   ├─ scrape.yml               daily cron + manual: scrape → commit data/ → build → deploy Pages
 │   ├─ pages.yml                on push to main: build → deploy Pages (no scrape)
@@ -247,7 +248,7 @@ python -m scraper validate        # schema-check data/solicitations.jsonl
 `--limit N` caps records per source for quick local runs (and the workflow_dispatch input).
 Logging to stderr with per-source progress; final one-line summary to stdout.
 
-npm scripts: `serve` (node serve.js 8080), `build` (python -m scraper build), `scrape` (python -m scraper scrape --all), `scrape:quick` (… --limit 40), `test` (node --test site/tests), `dev` (scrape:quick && build && serve).
+npm scripts: `serve` (node serve.js 8091), `build` (python -m scraper build), `scrape` (python -m scraper scrape --all), `scrape:quick` (… --limit 40), `test` (node --test site/tests), `dev` (scrape:quick && build && serve).
 
 ---
 

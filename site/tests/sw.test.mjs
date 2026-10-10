@@ -50,7 +50,7 @@ function makeCaches(base) {
 /**
  * Load sw.js for a given origin/scope. `net(url, req)` returns a Response or throws (offline).
  */
-function loadSW({ origin = 'https://user.github.io', scope = '/sbir/', net }) {
+function loadSW({ origin = 'https://user.github.io', scope = '/sams-garage/', net }) {
   const listeners = {};
   const calls = { fetch: [], skipWaiting: 0, claim: 0 };
   const base = origin + scope;
@@ -115,11 +115,11 @@ test('install precaches the whole shell with cache: reload and skips waiting', a
 
 test('activate deletes old shell caches, keeps the data cache, claims clients', async () => {
   const sw = loadSW({ net: () => ok('x') });
-  await sw.caches.open('sbir-portal-0.0.1-shell');
-  await sw.caches.open('sbir-data');
+  await sw.caches.open('sg-0.0.1-shell');
+  await sw.caches.open('sg-data');
   await sw.caches.open(sw.VERSION + '-shell');
   await sw.lifecycle('activate');
-  assert.deepEqual((await sw.caches.keys()).sort(), [sw.VERSION + '-shell', 'sbir-data'].sort());
+  assert.deepEqual((await sw.caches.keys()).sort(), [sw.VERSION + '-shell', 'sg-data'].sort());
   assert.equal(sw.calls.claim, 1);
 });
 

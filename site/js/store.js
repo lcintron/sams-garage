@@ -4,7 +4,7 @@
  * working with in-memory state. No DOM access; the backing storage can be swapped for tests with useStorage().
  */
 
-const PREFIX = 'sbir.';
+const PREFIX = 'sg.';
 const memory = new Map();
 const memoryStorage = {
   getItem: k => (memory.has(k) ? memory.get(k) : null),

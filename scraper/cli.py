@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m scraper", description="SBIR Portal data pipeline.")
+    parser = argparse.ArgumentParser(prog="python -m scraper", description="SAM's Garage data pipeline.")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR, help="database directory (default: data)")
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     commands = parser.add_subparsers(dest="command", required=True)

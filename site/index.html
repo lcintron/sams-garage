@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SBIR Portal</title>
-<meta name="description" content="Search every open and upcoming U.S. federal SBIR/STTR topic and solicitation (DoD, NIH, NSF, DOE, NASA, USDA and more), refreshed daily. Works offline.">
+<title>SAM's Garage</title>
+<meta name="description" content="SAM's Garage (Sg): search every open and upcoming U.S. federal SBIR/STTR topic and solicitation (DoD, NIH, NSF, DOE, NASA, USDA and more), refreshed daily. Works offline.">
 <meta name="theme-color" content="#0b1118">
 <meta name="color-scheme" content="dark light">
 <link rel="manifest" href="manifest.webmanifest">
@@ -15,11 +15,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SBIR Portal">
+<meta name="apple-mobile-web-app-title" content="Sg">
 <script>
   // Apply the saved theme before first paint (no flash). Dark is the default unless the system asks for light.
   try {
-    var p = JSON.parse(localStorage.getItem('sbir.prefs') || '{}');
+    var p = JSON.parse(localStorage.getItem('sg.prefs') || '{}');
     if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
     if (p.filtersCollapsed) document.documentElement.classList.add('filters-collapsed');
   } catch (e) { /* storage blocked: follow the system */ }
@@ -36,9 +36,10 @@
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
       <span class="badge hidden" id="filtersBadge"></span>
     </button>
-    <a class="brand" href="#/" title="SBIR Portal — all results">
+    <a class="brand" href="#/" title="SAM's Garage — all results" aria-label="SAM's Garage, all results">
       <img class="logo" src="icons/icon.svg" alt="" width="28" height="28">
-      <span class="brand-name">SBIR Portal</span>
+      <span class="brand-name">SAM's <span class="brand-accent">Garage</span></span>
+      <span class="brand-short" aria-hidden="true">S<span class="brand-accent">g</span></span>
     </a>
 
     <div class="search-wrap" role="search">
@@ -63,7 +64,7 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.2" fill="currentColor"/></svg>
         </a>
       </nav>
-      <button id="installBtn" class="btn small primary hidden" type="button" title="Install SBIR Portal as an app">Install</button>
+      <button id="installBtn" class="btn small primary hidden" type="button" title="Install SAM's Garage as an app">Install</button>
       <button id="themeBtn" class="icon-btn" type="button" title="Switch to light theme" aria-label="Switch to light theme">
         <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -119,6 +120,6 @@
   <div id="scrim" class="scrim hidden"></div>
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 </div>
-<noscript><p class="noscript">SBIR Portal needs JavaScript to search the data.</p></noscript>
+<noscript><p class="noscript">SAM's Garage needs JavaScript to search the data.</p></noscript>
 </body>
 </html>
