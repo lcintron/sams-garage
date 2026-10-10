@@ -51,7 +51,7 @@ This restates PLAN.md §4. Every key is always present and is `null` when unknow
 | Key | Type | Notes |
 |---|---|---|
 | `id` | string | `<prefix>:<native id>`. The prefixes are `sbirgov` (sbir.gov topic node id), `dsip` (DSIP `topicCode`) and `grants` (Grants.gov opportunity id). Native ids are limited to `[A-Za-z0-9._-]`. |
-| `source` | string | The primary source: `dod_dsip`, `sbir_gov` or `grants_gov`. |
+| `source` | string | Where the content comes from now, the preferred source that lists the record: `dod_dsip`, `sbir_gov` or `grants_gov`. It can differ from the id's prefix (ids are stable; see the merge rules). |
 | `links` | object | Always has the keys `dod_dsip`, `sbir_gov`, `grants_gov` and `official`. These are human URLs. The DSIP topics app has no per-topic deep link (`?searchText=` is ignored and `/topic-details/<id>` returns 404), so `dod_dsip` is the app root, `https://www.dodsbirsttr.mil/topics-app/`. For DSIP topics, `official` is the topic PDF (`/topics/api/public/topics/<topicId>/download/PDF`). |
 | `alt_ids` | string[] | Ids this record absorbed through dedupe, sorted. |
 | `title`, `agency`, `sub_agency` | string | `agency` is one of DOD, HHS, NSF, DOE, NASA, USDA, DHS, DOT, EPA, ED, DOC or OTHER. sbir.gov's "DOW" (Department of War) maps to DOD. |
@@ -93,9 +93,13 @@ Each run does the following:
    two distinct topics from the same source are never folded together.
 3. **Combine.** The primary record comes from the preferred source (dod_dsip > sbir_gov > grants_gov).
    Secondary records fill empty fields and add their links and keywords, and the longest non-empty
-   description wins. The canonical id is the primary's id. If a better source appears later (for
-   example DSIP after sbir.gov), the id moves to that source, the old id goes into `alt_ids`, and
-   `first_seen` is kept. The site's `records/<id>.json` keeps the old id's changelog events.
+   description wins. **Ids are stable:** a new record takes the primary's id, and a published id never
+   changes. If a better source appears later (for example DSIP after sbir.gov), or the source that first
+   listed a record drops it while another still lists it, the record keeps its id: `source` and the
+   content follow the preferred source that lists it now, and the other ids go into `alt_ids`.
+   `first_seen` is kept, and the site's `records/<id>.json` also shows the events logged under its
+   `alt_ids`. So an id's prefix names the source that *first* published the record, which can differ
+   from `source`. (Two records re-keyed by the older "the id moves" rule keep their current ids.)
 4. **Status.**
    - Rule 1: when a source reported the record this run, the record takes that source's status
      (the most preferred reporter wins) and `last_seen` is set to today.

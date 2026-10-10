@@ -22,7 +22,6 @@ from bs4.element import NavigableString, Tag
 SOURCE_NAMES: tuple[str, ...] = ("dod_dsip", "sbir_gov", "grants_gov")
 SOURCE_PREFERENCE: dict[str, int] = {name: rank for rank, name in enumerate(SOURCE_NAMES)}
 ID_PREFIXES: dict[str, str] = {"sbir_gov": "sbirgov", "dod_dsip": "dsip", "grants_gov": "grants"}
-PREFIX_TO_SOURCE: dict[str, str] = {prefix: source for source, prefix in ID_PREFIXES.items()}
 
 STATUSES: tuple[str, ...] = ("open", "pre_release", "forecasted", "closed", "unknown")
 PROGRAMS: tuple[str, ...] = ("SBIR", "STTR", "SBIR/STTR")
@@ -566,10 +565,10 @@ def validate(data: dict[str, Any]) -> list[str]:
     if missing:
         return problems
 
+    # The id's prefix names the source that first published the record; "source" is where its content comes
+    # from now. They differ once a record outlives its first source or a better one appears (ids are stable).
     if not isinstance(rid, str) or not ID_RE.match(rid):
         bad("id must look like '<sbirgov|dsip|grants>:<native id>'")
-    elif PREFIX_TO_SOURCE.get(rid.split(":", 1)[0]) != data["source"]:
-        bad(f"id prefix does not match source {data['source']!r}")
     if data["source"] not in SOURCE_NAMES:
         bad(f"unknown source {data['source']!r}")
     links = data["links"]
