@@ -101,7 +101,8 @@ Releases run in CI on demand: **Actions → Release → Run workflow** on `main`
 `gh workflow run release.yml -f bump=auto`). Nothing is released by a merge. The workflow works out the version,
 commits `chore(release): vX.Y.Z` with the new version in the app, tags `vX.Y.Z`, builds the Windows, macOS and Linux
 installers (each with today's data), publishes a GitHub Release, and deploys the site from the tag with today's data.
-**Dry run** only reports the version it would release. Locally: `make release DRY=1` (or
+A pre-release (`prerelease` bump, or a label such as `Beta`) is published as a GitHub pre-release with its installers
+but never deployed to the site, which keeps showing the latest stable release. **Dry run** only reports the version it would release. Locally: `make release DRY=1` (or
 `node scripts/release.js auto --dry`) shows the next version, and `make version` the current one.
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), and with **auto** (the default)

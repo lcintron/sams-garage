@@ -10,6 +10,7 @@ name: Release
 #      data (the newest data/ on main), which the desktop app uses when the live site cannot be reached.
 #   3. "publish": create the GitHub Release with the installers and generated notes.
 #   4. "deploy-pages": publish GitHub Pages: the release's code with today's data (scripts/assemble-site.sh).
+#      Skipped for a pre-release (a tag such as v1.2.0-Beta.1): the site only ever shows stable releases.
 # Tick "Dry run" to see the version a run would release without changing anything.
 on:
   workflow_dispatch:
@@ -107,7 +108,11 @@ jobs:
           DRY: ${{ inputs.dry_run }}
         run: |
           if [ "$RELEASED" = "true" ]; then
-            echo "Released **$TAG**. The installers, the GitHub Release and the site deploy follow in this run." >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$TAG" == *-* ]]; then
+              echo "Released pre-release **$TAG**. The installers and the GitHub pre-release follow in this run; the site is not deployed (it keeps the latest stable release)." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Released **$TAG**. The installers, the GitHub Release and the site deploy follow in this run." >> "$GITHUB_STEP_SUMMARY"
+            fi
           elif [ "$DRY" = "true" ] && [ -n "$TAG" ]; then
             echo "Dry run: this would release **$TAG**. Nothing was changed." >> "$GITHUB_STEP_SUMMARY"
           elif [ -n "$VERSION" ]; then
@@ -195,6 +200,7 @@ jobs:
   deploy-pages:
     name: Deploy site from ${{ needs.version.outputs.tag }}
     needs: [version, publish]
+    if: ${{ !contains(needs.version.outputs.tag, '-') }}   # pre-releases never become the public site
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
