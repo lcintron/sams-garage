@@ -2,6 +2,8 @@
 const VERSION = 'sg-0.1.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
 const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
+// Data caches of earlier names, moved into DATA_CACHE on activate (SBIR Portal was the app's name before).
+const LEGACY_DATA_CACHES = ['sbir-data'];
 
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
@@ -26,9 +28,34 @@ self.addEventListener('install', e => {
     .then(() => self.skipWaiting()));
 });
 
+/**
+ * Copy every entry of a legacy data cache into DATA_CACHE (entries already there win), so offline data survives the
+ * rename too. Returns the legacy caches that could not be copied: they are kept for the next activation.
+ */
+async function adoptLegacyData(keys) {
+  const keep = new Set();
+  for (const name of LEGACY_DATA_CACHES.filter(n => keys.includes(n))) {
+    try {
+      const from = await caches.open(name);
+      const to = await caches.open(DATA_CACHE);
+      for (const req of await from.keys()) {
+        if (await to.match(req)) continue;
+        const res = await from.match(req);
+        if (res) await to.put(req, res);
+      }
+    } catch {
+      keep.add(name);
+    }
+  }
+  return keep;
+}
+
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== DATA_CACHE).map(k => caches.delete(k))))
+    .then(async keys => {
+      const keep = await adoptLegacyData(keys);
+      await Promise.all(keys.filter(k => k !== SHELL_CACHE && k !== DATA_CACHE && !keep.has(k)).map(k => caches.delete(k)));
+    })
     .then(() => self.clients.claim()));
 });
 

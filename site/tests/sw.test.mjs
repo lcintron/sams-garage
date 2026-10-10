@@ -123,6 +123,23 @@ test('activate deletes old shell caches, keeps the data cache, claims clients', 
   assert.equal(sw.calls.claim, 1);
 });
 
+test('activate moves the SBIR Portal data cache into sg-data, keeping newer entries, then deletes it', async () => {
+  const sw = loadSW({ net: () => ok('x') });
+  const base = 'https://user.github.io/sams-garage/';
+  const legacy = await sw.caches.open('sbir-data');
+  await legacy.put(new Request(base + 'data/catalog.json'), ok('["old catalog"]'));
+  await legacy.put(new Request(base + 'data/records/dsip__A1.json?v=7'), ok('{"id":"dsip:A1"}'));
+  await legacy.put(new Request(base + 'data/solicitations.sqlite?v=7'), ok('SQLite format 3', 'application/vnd.sqlite3'));
+  const current = await sw.caches.open('sg-data');
+  await current.put(new Request(base + 'data/catalog.json'), ok('["new catalog"]'));
+  await sw.lifecycle('activate');
+  assert.ok(!(await sw.caches.keys()).includes('sbir-data'), 'legacy cache deleted');
+  const data = sw.caches.stores.get('sg-data');
+  assert.equal(await (await data.match(base + 'data/catalog.json')).text(), '["new catalog"]', 'an existing entry wins');
+  assert.equal(await (await data.match(base + 'data/records/dsip__A1.json?v=7')).text(), '{"id":"dsip:A1"}');
+  assert.equal(await (await data.match(base + 'data/solicitations.sqlite?v=7')).text(), 'SQLite format 3');
+});
+
 test('production: shell comes from the cache without touching the network, also offline', async () => {
   let online = true;
   const sw = loadSW({ net: url => (online ? ok('net ' + url, 'text/html') : offline()) });
