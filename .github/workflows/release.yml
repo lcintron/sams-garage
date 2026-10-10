@@ -45,6 +45,9 @@ jobs:
     name: Bump version and tag
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: main-push        # shared with scrape.yml's scrape job: the two jobs that push to main take turns
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:

@@ -26,14 +26,48 @@
   "build": {
     "appId": "local.samsgarage",
     "productName": "SAM's Garage",
-    "files": ["electron/**", "site/**", "!site/tests/**", "!site/icons/make-icons.py", "!site/package.json"],
-    "directories": { "output": "dist" },
+    "files": [
+      "electron/**",
+      "site/**",
+      "!site/tests/**",
+      "!site/icons/make-icons.py",
+      "!site/package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
     "artifactName": "SAMs-Garage-${version}-${os}-${arch}.${ext}",
     "icon": "site/icons/icon-512.png",
-    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "site/icons/icon.ico" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.productivity" },
-    "linux": { "target": ["AppImage", "deb"], "category": "Office", "maintainer": "Luis Cintron" }
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "site/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "maintainer": "Luis Cintron"
+    }
   },
   "devDependencies": {
     "electron": "^33.0.0",

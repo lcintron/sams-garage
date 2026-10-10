@@ -35,6 +35,9 @@ jobs:
     name: Scrape sources and commit data
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: main-push        # shared with release.yml's version job: the two jobs that push to main take turns
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
