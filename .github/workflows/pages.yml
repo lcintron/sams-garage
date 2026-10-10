@@ -13,6 +13,11 @@ on:
         required: false
         default: ''
 
+env:
+  # The public site's address (link previews, the desktop app's shared links): scripts/site-url.sh.
+  # Change to https://sg.luiscintron.com/ once the custom domain is set up in Settings -> Pages.
+  SITE_URL: https://lcintron.github.io/sams-garage/
+
 permissions:
   contents: read
 

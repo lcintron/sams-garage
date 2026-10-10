@@ -28,6 +28,11 @@ on:
         type: boolean
         default: false
 
+env:
+  # The public site's address (link previews, the desktop app's shared links): scripts/site-url.sh.
+  # Change to https://sg.luiscintron.com/ once the custom domain is set up in Settings -> Pages.
+  SITE_URL: https://lcintron.github.io/sams-garage/
+
 permissions:
   contents: read
 
@@ -145,6 +150,9 @@ jobs:
           git fetch --no-tags --depth=1 origin main
           git checkout FETCH_HEAD -- data
           python -m scraper build --out site/data
+      - name: Point the app at the public site
+        shell: bash
+        run: bash scripts/site-url.sh site
       - name: Build installers
         run: npx electron-builder --publish never
         env:

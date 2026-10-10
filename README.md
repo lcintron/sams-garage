@@ -85,8 +85,12 @@ which redeploys the latest (or a chosen) release by hand. [`ci.yml`](.github/wor
 push and pull request.
 
 **One-time setup:** in the GitHub repository, go to **Settings → Pages → Build and deployment → Source** and choose
-**GitHub Actions**. For the custom domain, add `sg.luiscintron.com` under **Settings → Pages → Custom domain** (and a
-DNS CNAME record to `lcintron.github.io`); `site/CNAME` already names it.
+**GitHub Actions**. The custom domain is set in **Settings → Pages → Custom domain** (`sg.luiscintron.com`, with a
+DNS CNAME record to `lcintron.github.io`); `site/CNAME` is kept for reference only, since GitHub ignores it for
+Actions deployments. Until then the public address is `https://lcintron.github.io/sams-garage/`: it is the
+`SITE_URL` in the workflows, which [`scripts/site-url.sh`](scripts/site-url.sh) writes into the link-preview tags of
+`index.html` and into `site/js/config.js` (where the desktop app's shared links point). Once the domain works,
+change `SITE_URL` in `release.yml`, `scrape.yml` and `pages.yml` to `https://sg.luiscintron.com/`.
 
 In the app, the header pill shows when the data was last refreshed. It turns amber when a source failed on the last
 run. When newer data is published while the app is open, the app reloads the catalog and shows a "Data updated" toast.
