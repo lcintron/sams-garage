@@ -24,7 +24,7 @@ export function renderAbout(view, o) {
 
   view.replaceChildren(h('div', { class: 'about' },
     h('h1', { text: "SAM's Garage" }),
-    h('p', null, "SAM's Garage (Sg) puts every open and upcoming U.S. federal SBIR/STTR topic and solicitation in one searchable list: DoD, HHS/NIH, NSF, DOE, NASA, USDA, DHS, DOT, EPA, ED, DOC and more. ',
+    h('p', null, "SAM's Garage (Sg) puts every open and upcoming U.S. federal SBIR/STTR topic and solicitation in one searchable list: DoD, HHS/NIH, NSF, DOE, NASA, USDA, DHS, DOT, EPA, ED, DOC and more. ",
       'The data is scraped daily by a GitHub Action from SBIR.gov, the DoD SBIR/STTR portal (DSIP) and Grants.gov, stored in the git repository, and searched entirely in your browser. ',
       'Always confirm details in the official solicitation before you propose.'),
     m?.fixture ? h('div', { class: 'notice' }, h('h2', { text: 'Development fixture' }),
