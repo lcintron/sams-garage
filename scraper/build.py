@@ -44,6 +44,10 @@ from .store import DataDir, dumps_line, write_bytes_atomic
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
+# The site data format (the files under site/data and their shapes) that the app reads. Bump it with any change an
+# installed app could not read; apps that know an older format keep their data and ask for an update
+# (site/js/data.js DATA_FORMAT, electron/protocol.js DATA_FORMAT).
+SITE_FORMAT = 1
 CATALOG_SUMMARY_MAX = 240
 CATALOG_KEYWORDS_MAX = 15
 INDEX_DESCRIPTION_MAX = 4000
@@ -174,6 +178,7 @@ def data_version(records: list[Record], changelog: list[dict[str, Any]]) -> str:
 
 def site_meta(records: list[Record], meta_in: dict[str, Any], version: str, build_time: datetime | None) -> dict[str, Any]:
     return {
+        "format": SITE_FORMAT,
         "schema_version": SCHEMA_VERSION,
         "build_time": utc_timestamp(build_time or _default_build_time()),
         "data_version": version,

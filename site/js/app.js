@@ -369,8 +369,16 @@ async function loadAll() {
   if (meta) await checkVersion(meta);
 }
 
+/** Newer data than this version of the app reads: keep what is shown and ask for an update. */
+function newerFormat(meta) {
+  if (data.formatSupported(meta)) return false;
+  toast('Update the app to load the newest data.', { id: 'format', timeout: 0 });
+  return true;
+}
+
 /** Compare meta's data_version with the one the cached catalog belongs to; refetch and say so when it changed. */
 async function checkVersion(meta) {
+  if (newerFormat(meta)) return;
   const v = data.metaVersion(meta);
   const stored = store.dataVersion();
   if (!v) return;

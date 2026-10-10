@@ -19,7 +19,7 @@ const SMOKE_TIMEOUT_MS = 20000;
 
 // Before the app is ready: app:// behaves like https:// (a secure origin with fetch, CORS, storage and streaming).
 protocol.registerSchemesAsPrivileged([
-  { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
+  { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ]);
 
 // No system frame: the app's top bar is the window's title bar (css: html[data-titlebar]). On Windows and Linux the
@@ -64,15 +64,20 @@ ipcMain.on('app:titlebar-colors', (e, c) => {
   }
 });
 
-/** --smoke-test: wait until the list shows at least one card, print the verdict, exit 0 or 1. */
+/** --smoke-test: wait until the list shows at least one card, print the verdict, exit 0 or 1. The 20 s run from
+ * the start, so a page that never finishes loading fails too. */
 function smoke(win, sources) {
+  let finished = false;
   const done = (ok, msg) => {
+    if (finished) return;
+    finished = true;
     const counts = Object.entries(sources).map(([k, v]) => `${k} ${v}`).join(', ');
     if (counts) console.log(`data: ${counts}`);
     console.log(ok ? `SMOKE OK ${msg}` : `SMOKE FAIL ${msg}`);
     app.exit(ok ? 0 : 1);
   };
   const started = Date.now();
+  setTimeout(() => done(false, `the app did not finish loading within ${SMOKE_TIMEOUT_MS / 1000} s`), SMOKE_TIMEOUT_MS + 1000).unref?.();
   win.webContents.on('console-message', (...args) => {
     const d = args[0] && typeof args[0] === 'object' && 'message' in args[0] ? args[0] : { level: args[1], message: args[2] };
     if (d.level === 'error' || d.level === 3) console.error('[page] ' + d.message);
@@ -80,11 +85,12 @@ function smoke(win, sources) {
   win.webContents.on('did-fail-load', (e, code, desc, url) => done(false, `load failed: ${desc} (${code}) ${url}`));
   win.webContents.on('render-process-gone', (e, d) => done(false, `renderer gone: ${d.reason}`));
   const poll = async () => {
+    if (finished) return;
     let n = 0;
     try { n = await win.webContents.executeJavaScript("document.querySelectorAll('#list .card').length"); } catch (e) { /* not ready */ }
     if (n > 0) return done(true, `${n} cards`);
     if (Date.now() - started > SMOKE_TIMEOUT_MS) {
-      let why = 'no .card rendered within 20 s';
+      let why = `no .card rendered within ${SMOKE_TIMEOUT_MS / 1000} s`;
       try { why += ': ' + await win.webContents.executeJavaScript("(document.querySelector('#list')||{}).innerText || ''").then(t => t.trim().slice(0, 200) || 'empty list'); } catch (e) { /* ignore */ }
       return done(false, why);
     }
@@ -104,8 +110,9 @@ app.whenReady().then(() => {
     userAgent: `SAMs-Garage/${app.getVersion()} (Electron; desktop app; +https://github.com/lcintron/sams-garage)`,
     onData: (rel, source, detail) => {
       sources[source] = (sources[source] || 0) + 1;
-      if (SMOKE && source !== 'live') console.log(`data/${rel}: ${source}${detail ? ' (' + detail + ')' : ''}`);
-    }
+      if (SMOKE && (source !== 'live' || detail)) console.log(`data/${rel}: ${source}${detail ? ' (' + detail + ')' : ''}`);
+    },
+    onNote: (rel, note) => console.warn(`data/${rel}: ${note}`)
   }));
   // The app needs no device permissions; only writing to the clipboard ("Copy link") is allowed.
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'clipboard-sanitized-write'));

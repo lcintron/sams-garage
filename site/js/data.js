@@ -7,6 +7,8 @@
  */
 
 export const DATA_CACHE = 'sg-data'; // must match sw.js
+// The site data format this app reads (meta.json "format"; scraper/build.py SITE_FORMAT). Newer data is not loaded.
+export const DATA_FORMAT = 1;
 const BASE = 'data/';
 
 export class DataError extends Error {
@@ -65,6 +67,12 @@ export async function purgeStaleData(version) {
       return /\/data\/(records\/|solicitations\.sqlite)/.test(u.pathname) && u.searchParams.get('v') !== version;
     }).map(req => cache.delete(req)));
   } catch { /* ignore */ }
+}
+
+/** Whether this app reads the data meta describes (no format: the first one). */
+export function formatSupported(meta) {
+  const f = meta && meta.format;
+  return f == null || (Number.isInteger(f) && f <= DATA_FORMAT);
 }
 
 /** Version string from meta, tolerant of naming. */

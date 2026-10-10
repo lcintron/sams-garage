@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as store from '../js/store.js';
-import { agencyInfo, idSafe, metaVersion, metaUpdated } from '../js/data.js';
+import { agencyInfo, idSafe, metaVersion, metaUpdated, formatSupported, DATA_FORMAT } from '../js/data.js';
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(site, f), 'utf8');
@@ -94,6 +94,8 @@ test('store moves SBIR Portal keys (sbir.*) to sg.* once, never overwriting', ()
 test('data helpers', () => {
   assert.equal(idSafe('dsip:ARM26BX06-NV012'), 'dsip__ARM26BX06-NV012');
   assert.equal(metaVersion({ data_version: 'abc' }), 'abc');
+  assert.ok(formatSupported({ format: DATA_FORMAT }) && formatSupported({}) && formatSupported(null));
+  assert.ok(!formatSupported({ format: DATA_FORMAT + 1 }) && !formatSupported({ format: '1' }));
   assert.equal(metaUpdated({ last_run: '2026-10-09T06:15:00Z' }), Date.UTC(2026, 9, 9, 6, 15));
   const a1 = agencyInfo([{ code: 'HHS', name: 'x', sub_agencies: [{ code: 'NIH', name: 'National Institutes of Health' }] }]);
   assert.equal(a1.get('HHS').subs.get('NIH'), 'National Institutes of Health');
