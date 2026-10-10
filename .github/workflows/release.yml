@@ -1,0 +1,218 @@
+name: Release
+
+# Releases are cut on demand, never by a merge. Start one from Actions -> Release -> Run workflow (on main)
+# or with: gh workflow run release.yml -f bump=auto
+#   1. "version": work out the semantic-version bump from the conventional commits since the last tag (or
+#      use the bump chosen in the form), update the version shown in the app, commit, tag and push.
+#      With "auto" and only chore/docs/ci/data commits since the last tag there is nothing to release and
+#      the run stops here.
+#   2. "build": build the Windows, macOS and Linux installers from that tag, each with a snapshot of today's
+#      data (the newest data/ on main), which the desktop app uses when the live site cannot be reached.
+#   3. "publish": create the GitHub Release with the installers and generated notes.
+#   4. "deploy-pages": publish GitHub Pages: the release's code with today's data (scripts/assemble-site.sh).
+# Tick "Dry run" to see the version a run would release without changing anything.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump (auto reads the commits since the last release)
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major, prerelease]
+      prerelease:
+        description: Pre-release label (e.g. Beta); empty for a normal release
+        type: string
+        default: ''
+      dry_run:
+        description: Dry run (only report the version this would release)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Bump version and tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false   # no lock file to key a cache on (setup-node caches npm by default since v5)
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Check inputs
+        # Inputs reach the shell only through env vars (never interpolated into the script) and are
+        # allowlisted here; runs are also refused from any ref other than main.
+        env:
+          REF: ${{ github.ref }}
+          BUMP: ${{ inputs.bump }}
+          PRE: ${{ inputs.prerelease }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Releases are cut from main only; run the workflow on main (got $REF)."
+            exit 1
+          fi
+          case "$BUMP" in auto|patch|minor|major|prerelease) ;;
+            *) echo "::error::Unknown bump '$BUMP'."; exit 1 ;;
+          esac
+          # Dot-separated identifiers of letters, digits and dashes (the semver pre-release form): no "..",
+          # no leading or trailing dot, no all-digit identifier with a leading zero ("01"). git has the last
+          # word, so the tag is a valid ref before anything is committed.
+          if [ "${#PRE}" -gt 30 ] || [[ ! "$PRE" =~ ^([0-9A-Za-z][0-9A-Za-z-]*(\.[0-9A-Za-z][0-9A-Za-z-]*)*)?$ ]] \
+             || [[ "$PRE" =~ (^|\.)0[0-9]+(\.|$) ]] \
+             || ! git check-ref-format "refs/tags/v0.0.0${PRE:+-$PRE}"; then
+            echo "::error::Pre-release label must be dot-separated groups of letters, digits or dashes, with no leading zeros in numeric groups, e.g. Beta or rc.1 (got '$PRE')."
+            exit 1
+          fi
+      - name: Bump version, commit, tag and push
+        id: release
+        env:
+          BUMP: ${{ inputs.bump }}
+          PRE: ${{ inputs.prerelease }}
+          DRY: ${{ inputs.dry_run && '1' || '' }}
+        run: make release CI=1 BUMP="$BUMP" PRE="$PRE" DRY="$DRY"
+      - name: Summary
+        if: always()
+        env:
+          RELEASED: ${{ steps.release.outputs.released }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "$RELEASED" = "true" ]; then
+            echo "Released **$TAG**. The installers, the GitHub Release and the site deploy follow in this run." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DRY" = "true" ] && [ -n "$TAG" ]; then
+            echo "Dry run: this would release **$TAG**. Nothing was changed." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$VERSION" ]; then
+            echo "Nothing to release: no feat/fix/perf commits since the last release (current version $VERSION). Choose a bump other than auto to release anyway." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No release was made; see the log of the failed step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: version
+    if: needs.version.outputs.released == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false   # no lock file to key a cache on (setup-node caches npm by default since v5)
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install --no-audit --no-fund
+      - name: Bundle today's data
+        # The newest database on main, built by this tag's scraper into site/data: the installers bundle it as
+        # the desktop app's snapshot for when the live site cannot be reached.
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git checkout FETCH_HEAD -- data
+          python -m scraper build --out site/data
+      - name: Build installers
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # unsigned builds; add signing secrets here when available
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p out
+          find dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.blockmap' \) -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ matrix.os }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: SAM's Garage ${{ needs.version.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
+          files: installers/*
+
+  deploy-pages:
+    name: Deploy site from ${{ needs.version.outputs.tag }}
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+          fetch-depth: 0   # the release tag and the newest main, for scripts/assemble-site.sh
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Assemble site (the release's code with today's data)
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: bash scripts/assemble-site.sh "$TAG" origin/main _site
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5
