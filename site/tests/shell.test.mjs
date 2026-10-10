@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as store from '../js/store.js';
-import { agencyInfo, idSafe, metaVersion, metaUpdated, formatSupported, DATA_FORMAT } from '../js/data.js';
+import { agencyInfo, idSafe, metaVersion, metaUpdated, formatSupported, shouldUseData, DATA_FORMAT } from '../js/data.js';
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(site, f), 'utf8');
@@ -89,6 +89,18 @@ test('store moves SBIR Portal keys (sbir.*) to sg.* once, never overwriting', ()
   store.useStorage(s); // a second run changes nothing
   assert.deepEqual([...mem.keys()].sort(), ['other', 'sg.prefs', 'sg.watchlist']);
   store.useStorage(null);
+});
+
+test('shouldUseData: only data in a format the app reads', () => {
+  assert.equal(shouldUseData({ format: 1 }, 1), true);
+  assert.equal(shouldUseData({ format: 1 }, 2), true, 'older data is fine');
+  assert.equal(shouldUseData({ format: 2 }, 1), false);
+  assert.equal(shouldUseData({}, 1), true, 'no format: the first one');
+  assert.equal(shouldUseData(null, 1), true, 'meta not loaded (offline, slow): go ahead');
+  assert.equal(shouldUseData(undefined, 1), true);
+  assert.equal(shouldUseData({ format: '2' }, 1), false);
+  assert.equal(shouldUseData({ format: 1.5 }, 1), false);
+  assert.equal(shouldUseData({ format: DATA_FORMAT }), true);
 });
 
 test('data helpers', () => {

@@ -344,14 +344,29 @@ function setCatalog(catalog) {
   app.loaded = true;
 }
 
+const META_WAIT_MS = 2500; // how long first paint waits for meta.json's format before going ahead without it
+
 async function loadAll() {
   let resolveMeta;
   app.metaReady = new Promise(r => { resolveMeta = r; });
+  // All three start at once; nothing from the catalog or agencies is used before meta.json's format is known
+  // (or META_WAIT_MS passed: offline, slow), so an installed app never renders data newer than it reads.
   const metaP = data.loadMeta().then(m => { app.meta = m; app.version = data.metaVersion(m); return m; }).catch(() => null).finally(() => resolveMeta());
-  const agenciesP = data.loadAgencies().then(a => { app.agencies = data.agencyInfo(a); });
+  const catalogP = data.loadCatalog();
+  catalogP.catch(() => {}); // handled below
+  const agenciesP = data.loadAgencies();
+  const early = await Promise.race([metaP, new Promise(r => setTimeout(r, META_WAIT_MS))]);
+  // The desktop app is exempt: electron/protocol.js already serves it only data in a format it reads.
+  if (!DESKTOP && !data.shouldUseData(early)) {
+    await onHashChange();
+    showNewerDataNotice();
+    renderFreshness(el.freshness, early, app.offline);
+    app.lastMetaCheck = Date.now();
+    return;
+  }
 
   try {
-    setCatalog(await data.loadCatalog());
+    setCatalog(await catalogP);
   } catch (err) {
     app.loaded = false;
     const notBuilt = err.status === 404;
@@ -365,7 +380,7 @@ async function loadAll() {
     metaP.then(m => renderFreshness(el.freshness, m, app.offline));
     return;
   }
-  await agenciesP.catch(() => {});
+  app.agencies = data.agencyInfo(await agenciesP);
   await onHashChange();
   scheduleIndex();
 
@@ -375,9 +390,40 @@ async function loadAll() {
   if (meta) await checkVersion(meta);
 }
 
+/** The published data is newer than this version reads: no list, a notice and a way to update. */
+function showNewerDataNotice() {
+  el.count.textContent = 'Update needed';
+  el.indexState.textContent = '';
+  el.list.replaceChildren(h('div', { class: 'empty' },
+    h('p', { text: "A newer version of SAM's Garage is needed for the latest data." }),
+    h('button', { class: 'btn small primary', type: 'button', text: 'Reload', onclick: updateAndReload })));
+}
+
+/** Fetch the new version of the app (its service worker), let it take over, then reload. */
+async function updateAndReload() {
+  try {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) {
+      await reg.update();
+      const next = reg.installing || reg.waiting;
+      if (next) {
+        await new Promise(resolve => {
+          const t = setTimeout(resolve, 8000);
+          const check = () => { if (next.state === 'activated' || next.state === 'redundant') { clearTimeout(t); resolve(); } };
+          next.addEventListener('statechange', check);
+          if (next.state === 'installed') next.postMessage({ type: 'SKIP_WAITING' });
+          check();
+        });
+      }
+    }
+  } catch { /* offline or no worker: a plain reload */ }
+  location.reload();
+}
+
 /** Newer data than this version of the app reads: keep what is shown and ask for an update. */
 function newerFormat(meta) {
   if (data.formatSupported(meta)) return false;
+  if (!app.loaded) return true; // nothing shown yet: the list already says so (showNewerDataNotice)
   toast('Update the app to load the newest data.', { id: 'format', timeout: 0 });
   return true;
 }

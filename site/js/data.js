@@ -69,11 +69,17 @@ export async function purgeStaleData(version) {
   } catch { /* ignore */ }
 }
 
-/** Whether this app reads the data meta describes (no format: the first one). */
-export function formatSupported(meta) {
+/**
+ * Whether an app that reads data format `supported` may use the data meta describes. No meta (not loaded, e.g.
+ * offline) or no format (the first one) is fine; a format that is newer, or not a whole number, is not.
+ */
+export function shouldUseData(meta, supported = DATA_FORMAT) {
   const f = meta && meta.format;
-  return f == null || (Number.isInteger(f) && f <= DATA_FORMAT);
+  return f == null || (Number.isInteger(f) && f <= supported);
 }
+
+/** Whether this app reads the data meta describes. */
+export function formatSupported(meta) { return shouldUseData(meta, DATA_FORMAT); }
 
 /** Version string from meta, tolerant of naming. */
 export function metaVersion(meta) {
