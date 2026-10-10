@@ -6,7 +6,7 @@ const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updat
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './css/app.css',
-  './js/app.js', './js/data.js', './js/search.js', './js/filters.js', './js/profiles.js', './js/store.js', './js/sql.js', './js/export.js',
+  './js/app.js', './js/config.js', './js/data.js', './js/search.js', './js/filters.js', './js/profiles.js', './js/store.js', './js/sql.js', './js/export.js',
   './js/ui/dom.js', './js/ui/toast.js', './js/ui/list.js', './js/ui/detail.js', './js/ui/filters-panel.js', './js/ui/stats.js',
   './js/ui/profiles-dialog.js', './js/ui/sql-console.js', './js/ui/about.js',
   './vendor/minisearch/minisearch.js',

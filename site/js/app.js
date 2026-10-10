@@ -19,6 +19,7 @@ import {
 import * as data from './data.js';
 import { toCSV, toJSON, download, exportName } from './export.js';
 import { $, h, encodeId } from './ui/dom.js';
+import { publicBase, topicLink } from './config.js';
 import { toast } from './ui/toast.js';
 import { createList } from './ui/list.js';
 import { renderDetail, renderMissing } from './ui/detail.js';
@@ -281,7 +282,7 @@ async function showDetail(id, prevRoute) {
       if (star) star.setAttribute('aria-pressed', on ? 'true' : 'false');
       return on;
     },
-    onCopyLink: () => copyText(location.href.split('#')[0] + '#/s/' + encodeId(id), 'Link copied'),
+    onCopyLink: () => copyText(topicLink(publicBase(), id), 'Link copied'), // the desktop app links to the public site
     onExport: r => download(`${data.idSafe(r.id)}.json`, toJSON(r), 'application/json')
   });
   const sameRecord = prevRoute && prevRoute.name === 'detail' && prevRoute.id === id;
