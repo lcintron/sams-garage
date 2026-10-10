@@ -1,15 +1,15 @@
 name: Deploy site
 
-# Publishes GitHub Pages on demand: a release's code (the latest release tag by default, or the tag or branch
-# given) with today's data (data/ on main), assembled by scripts/assemble-site.sh. The Release workflow already
-# deploys the site for every release and scrape.yml redeploys it with fresh data every day; use this to redeploy
-# an older tag, or to deploy without releasing.
+# Publishes GitHub Pages on demand: a stable release's code (the latest one by default, or the vX.Y.Z tag given)
+# with today's data (data/ on main), assembled by scripts/assemble-site.sh. The Release workflow already deploys
+# the site for every stable release and scrape.yml redeploys it with fresh data every day; use this to roll back
+# to an older release or to redeploy without releasing. Branches and pre-release tags are never published.
 # Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Tag or branch whose code to deploy (empty = the latest release tag)
+        description: Stable release tag to deploy, e.g. v1.2.3 (empty = the latest stable release, or main while there is none)
         required: false
         default: ''
 
@@ -52,24 +52,20 @@ jobs:
         env:
           REF: ${{ inputs.ref }}
         run: |
-          if [ -n "$REF" ] && { [[ ! "$REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] || ! git check-ref-format --allow-onelevel "$REF"; }; then
-            echo "::error::Not a tag or branch name: '$REF'."
+          if [ -z "$REF" ]; then exit 0; fi   # the latest stable release (scripts/assemble-site.sh decides)
+          if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::ref must be empty or a stable release tag such as v1.2.3 (got '$REF'); branches and pre-releases are not deployed."
             exit 1
           fi
-          if [ -n "$REF" ] && ! git rev-parse -q --verify "refs/tags/$REF^{commit}" >/dev/null \
-             && ! git rev-parse -q --verify "refs/remotes/origin/$REF^{commit}" >/dev/null; then
-            echo "::error::No tag or branch '$REF' in this repository."
+          if ! git rev-parse -q --verify "refs/tags/$REF^{commit}" >/dev/null; then
+            echo "::error::No release tag '$REF' in this repository."
             exit 1
           fi
       - name: Assemble site (release code + today's data)
         env:
           REF: ${{ inputs.ref }}
         run: |
-          code=""
-          if [ -n "$REF" ]; then
-            if git rev-parse -q --verify "refs/tags/$REF^{commit}" >/dev/null; then code="refs/tags/$REF"; else code="origin/$REF"; fi
-          fi
-          bash scripts/assemble-site.sh "$code" origin/main _site
+          bash scripts/assemble-site.sh "${REF:+refs/tags/$REF}" origin/main _site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
