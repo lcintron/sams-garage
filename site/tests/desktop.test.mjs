@@ -125,6 +125,18 @@ test('data: an HTML page or a wrong body from the live site is never kept or ser
   assert.ok(looksValid('x.sqlite', SQLITE) && !looksValid('x.json', Buffer.from('[1]'), 'text/html; charset=utf-8'));
 });
 
+test('data: a large JSON body is parsed in full, so a truncated one is not kept', async () => {
+  const f = fixture();
+  const big = '[' + '"0123456789abcdef",'.repeat(1_000_000); // about 19 MiB, starts like JSON, never closes
+  const handle = handler(f, site({ 'search-index.json': () => new Response(big), 'catalog.json': () => new Response(big + '"end"]') }).fetch);
+  assert.equal((await get(handle, 'app://sg/data/search-index.json')).status, 404, 'no copy to fall back to');
+  const ok = await get(handle, 'app://sg/data/catalog.json');
+  assert.equal(ok.headers.get('x-sg-source'), 'live', 'a complete large body is fine');
+  await wait();
+  assert.ok(!fs.existsSync(path.join(f.cache, 'search-index.json')), 'the truncated body is not kept');
+  assert.ok(fs.existsSync(path.join(f.cache, 'catalog.json')));
+});
+
 test('data: a poisoned kept copy is skipped and removed', async () => {
   const f = fixture();
   fs.mkdirSync(f.cache, { recursive: true });

@@ -25,7 +25,6 @@ const APP_PAGE = `${ORIGIN}/index.html`;
 // The site data format this app reads: scraper/build.py SITE_FORMAT, site/js/data.js DATA_FORMAT (tested to match).
 const DATA_FORMAT = 1;
 const FORMAT_TTL_MS = 10 * 60000;
-const JSON_PARSE_MAX = 16 * 1024 * 1024; // bigger JSON is only checked for its first character
 const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'latin1');
 
 const TYPES = {
@@ -52,7 +51,6 @@ function looksValid(file, buf, contentType = '') {
   if (/text\/html/i.test(contentType)) return false;
   const ext = path.extname(file).toLowerCase();
   if (ext === '.json') {
-    if (buf.length > JSON_PARSE_MAX) return /^\s*[[{]/.test(buf.subarray(0, 64).toString('utf8'));
     try { JSON.parse(buf.toString('utf8')); return true; } catch (e) { return false; }
   }
   if (ext === '.sqlite') return buf.length >= 16 && buf.subarray(0, 16).equals(SQLITE_MAGIC);
