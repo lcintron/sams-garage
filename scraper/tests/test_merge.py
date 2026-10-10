@@ -208,6 +208,22 @@ def test_id_stays_when_the_first_source_drops_the_record():
     assert all(event["event"] != "new" for event in events)
 
 
+def test_a_kept_id_still_dedupes_a_source_that_appears_later():
+    # dsip:X keeps its id while sbir.gov feeds it; a third source listing the same topic joins it.
+    db = Db()
+    dsip = make_record("dod_dsip", "DON27BZ01-NV003", topic_number="DON27BZ01-NV003")
+    sbir = make_record("sbir_gov", "13020", topic_number="DON27BZ01-NV003", links={"sbir_gov": "https://www.sbir.gov/topics/13020"})
+    other = make_record("dod_dsip", "OTHER-1", topic_number="OTHER-1")
+    db.run(DAY1, dod_dsip=ok("dod_dsip", dsip, other), sbir_gov=ok("sbir_gov", sbir))
+    db.run(DAY2, dod_dsip=ok("dod_dsip", other), sbir_gov=ok("sbir_gov", sbir))
+    assert db.records["dsip:DON27BZ01-NV003"].source == "sbir_gov"
+    grants = make_record("grants_gov", "777", topic_number="DON27BZ01-NV003")
+    events = db.run(DAY3, dod_dsip=ok("dod_dsip", other), sbir_gov=ok("sbir_gov", sbir), grants_gov=ok("grants_gov", grants))
+    assert set(db.records) == {"dsip:DON27BZ01-NV003", "dsip:OTHER-1"}
+    assert db.records["dsip:DON27BZ01-NV003"].alt_ids == ["grants:777", "sbirgov:13020"]
+    assert all(event["event"] != "new" for event in events)
+
+
 def test_an_already_rekeyed_record_keeps_its_published_id():
     # Published as sbirgov:13020 after absorbing dsip:X (the old rule): it does not flip back when DSIP returns.
     db = Db()
