@@ -181,7 +181,7 @@ weights from the removed `analyze_sbir_hashtags.py`. The site's `profiles.js` is
 
 The workflows live in `.github/workflows/`:
 
-- `scrape.yml` runs daily at 06:15 UTC and can be started manually with an optional `limit`. It scrapes, validates and commits `data/`. The build-deploy job then checks out that exact commit, builds `site/data` and deploys Pages.
-- Both deploy jobs delete `site/tests`, `site/icons/make-icons.py` and `site/package.json` from their throwaway checkout before uploading `site/`, so development files are never published.
-- `pages.yml` runs on pushes to main that touch the site, the scraper or the data. It rebuilds and deploys.
-- `ci.yml` runs pytest, the data validation, a build smoke test and the site's `npm test`.
+- `scrape.yml` runs daily at 06:15 UTC and can be started manually with an optional `limit`. It scrapes, validates and commits `data/`. The deploy job then publishes Pages: the code of the latest release tag with the data of that exact commit.
+- Every Pages deploy (`scrape.yml`, `release.yml`, and `pages.yml` by hand) goes through `scripts/assemble-site.sh <code-ref> <data-ref>`: it takes `site/` and `scraper/` from the code ref, `data/` from the data ref, runs `python -m scraper build --out site/data` with the code ref's scraper, and leaves out `site/tests`, `site/icons/make-icons.py` and `site/package.json`, so development files are never published.
+- `release.yml` (by hand) tags a release, builds the desktop installers, each with a `site/data` snapshot built from the newest `data/` on main, and deploys Pages.
+- `ci.yml` runs pytest, the data validation, a build smoke test, a dry run of the site assembly and the site's `npm test`.

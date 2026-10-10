@@ -59,13 +59,14 @@ Non-goals
 ├─ LICENSE                      MIT, "Luis Cintron"
 ├─ .gitignore                   site/data/, __pycache__, .venv, node_modules, dist, .pytest_cache
 ├─ requirements.txt             requests, beautifulsoup4, (pytest in requirements-dev.txt)
-├─ package.json                 scripts only: serve, build, scrape, scrape:quick, test (no runtime deps)
+├─ package.json                 scripts (serve, build, scrape, test, start, smoke, dist:*, release) + electron-builder config
 ├─ serve.js                     zero-dependency static server for site/ (copy of GenGIS pattern)
 ├─ .claude/launch.json          {"name":"sams-garage","runtimeExecutable":"node","runtimeArgs":["serve.js","8091"],"port":8091}
 ├─ .github/workflows/
-│   ├─ scrape.yml               daily cron + manual: scrape → commit data/ → build → deploy Pages
-│   ├─ pages.yml                on push to main: build → deploy Pages (no scrape)
-│   └─ ci.yml                   on push/PR: pytest + node --test + build smoke test
+│   ├─ scrape.yml               daily cron + manual: scrape → commit data/ → deploy Pages (latest release + this data)
+│   ├─ release.yml              manual: semver tag → installers (Win/macOS/Linux) → GitHub Release → deploy Pages
+│   ├─ pages.yml                manual: redeploy the latest (or a given) release with today's data
+│   └─ ci.yml                   on push/PR: pytest + node --test + build and site-assembly smoke tests
 ├─ scraper/                     Python package (python -m scraper ...)
 │   ├─ __init__.py, __main__.py, cli.py
 │   ├─ model.py                 Record dataclass, normalization helpers, validate()
@@ -229,7 +230,7 @@ jobs:
 - The scrape step must exit 0 when one source fails but others succeed (record the failure in meta.json and a `::warning::`); exit non-zero only when all sources fail.
 - Never fail the deploy because nothing changed; still redeploy so `meta.json` build time is fresh (cheap).
 
-`pages.yml`: on push to `main` (paths: site/**, scraper/**, data/**, .github/workflows/pages.yml) and workflow_dispatch → same build-deploy job.
+`pages.yml`: workflow_dispatch only (optional `ref`, default the latest release tag). Since the SAM's Garage rename every deploy runs `scripts/assemble-site.sh`: the latest release's code with the newest data (see README "How the data stays fresh"); `release.yml` cuts releases (README "Releases").
 
 `ci.yml`: on push/PR → `pip install -r requirements-dev.txt && pytest -q`, `node --test site/tests`, and `python -m scraper build --out /tmp/site-data` from the committed data (smoke).
 
