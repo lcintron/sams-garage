@@ -62,6 +62,40 @@ test('withVersion keeps package.json as it is formatted', () => {
   assert.ok(out.endsWith('}\n') && out.includes('\n  "name": "sams-garage",\n'));
 });
 
+// Every place the version is shown must be updated: a target whose pattern no longer matches stops the release
+// before anything is written or committed, with --dry too.
+test('release.js: a version target without its version string is fatal, and nothing is committed', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sg-release-'));
+  try {
+    for (const d of ['scripts', 'site/js', 'scraper']) fs.mkdirSync(path.join(dir, d), { recursive: true });
+    for (const f of ['release.js', 'semver.js']) fs.copyFileSync(path.join(here, '..', '..', 'scripts', f), path.join(dir, 'scripts', f));
+    const files = {
+      'package.json': JSON.stringify({ name: 't', version: '1.0.0' }, null, 2) + '\n',
+      'site/js/app.js': "const APP_VERSION = '1.0.0'; // app version\n",
+      'site/sw.js': "const CACHE = 'sg-shell'; // the VERSION line is gone\n",
+      'scraper/__init__.py': '__version__ = "1.0.0"\n'
+    };
+    for (const [f, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), text);
+    const git = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: dir, encoding: 'utf8' });
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-q', '-m', 'feat: first');
+    for (const extra of [['--dry'], ['--no-push']]) {
+      const run = spawnSync(process.execPath, ['scripts/release.js', 'minor', ...extra], { cwd: dir, encoding: 'utf8' });
+      assert.notEqual(run.status, 0, extra.join(' '));
+      assert.match(run.stderr, /No version string to update in: site\/sw\.js/);
+    }
+    assert.equal(git('rev-list', '--count', 'HEAD').stdout.trim(), '1', 'nothing committed');
+    assert.equal(git('tag', '-l').stdout.trim(), '', 'nothing tagged');
+    assert.equal(git('status', '--porcelain').stdout, '', 'nothing written');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // scripts/release.js runs git without a shell and accepts only v<semver> tags: a crafted tag name that is a valid
 // git ref (such as one holding "$(...)") must never run as a command.
 test('release.js: a crafted tag name is refused and never executed', async () => {

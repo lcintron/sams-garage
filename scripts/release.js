@@ -91,11 +91,16 @@ const edits = [
   ['site/sw.js', s => s.replace(/const VERSION = '[^']*';[^\n]*/, `const VERSION = 'sg-${next}'; // app version; bump via scripts/release.js`)],
   ['scraper/__init__.py', s => s.replace(/__version__ = "[^"]*"/, `__version__ = "${next}"`)]
 ];
-for (const [file, fn] of edits) {
-  const before = read(file), after = fn(before);
-  if (before === after) console.warn('  (no version string found in ' + file + ')');
-  else { console.log('  updated ' + file); if (!flag('dry')) write(file, after); }
+// Every target must change; a pattern that no longer matches is fatal (also in --dry, so CI catches it) and is
+// reported before anything is written or committed.
+const rewritten = edits.map(([file, fn]) => { const before = read(file); return [file, before, fn(before)]; });
+const stale = rewritten.filter(([, before, after]) => before === after).map(([file]) => file);
+if (stale.length) {
+  console.error('No version string to update in: ' + stale.join(', ') + '. Fix the pattern in scripts/release.js (nothing was written).');
+  output({ released: 'false', tag: '', version: '' });
+  process.exit(1);
 }
+for (const [file, , after] of rewritten) { console.log('  updated ' + file); if (!flag('dry')) write(file, after); }
 
 if (flag('dry')) { console.log('Dry run: nothing written, committed or tagged.'); output({ released: 'false', tag, version: next }); process.exit(0); }
 
