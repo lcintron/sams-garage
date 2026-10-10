@@ -20,6 +20,7 @@ import * as data from './data.js';
 import { toCSV, toJSON, download, exportName } from './export.js';
 import { $, h, encodeId } from './ui/dom.js';
 import { publicBase, topicLink } from './config.js';
+import { aliasMap, resolveId, migrateWatchlist } from './ids.js';
 import { toast } from './ui/toast.js';
 import { createList } from './ui/list.js';
 import { renderDetail, renderMissing } from './ui/detail.js';
@@ -35,6 +36,7 @@ const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side
 const app = {
   catalog: [],
   byId: new Map(),
+  aliasOf: new Map(),         // old id (an alt_id) -> the record's id now (js/ids.js)
   meta: null,
   version: '',
   agencies: data.agencyInfo(null),
@@ -217,6 +219,14 @@ async function onHashChange() {
   const stateChanged = toQuery(parseQuery(query)) !== toQuery(app.state);
   if (stateChanged) app.state = parseQuery(query);
   if (route.mode) app.listMode = route.mode;
+  // An old id (absorbed by another record) in a link or bookmark: show that record, under its id now.
+  if (route.name === 'detail' && app.loaded) {
+    const now = resolveId(route.id, app.byId, app.aliasOf);
+    if (now && now !== route.id) {
+      route.id = now;
+      history.replaceState(null, '', buildHash('/s/' + encodeId(now), app.state));
+    }
+  }
   app.route = route;
   if (el.q.value.trim() !== app.state.q && document.activeElement !== el.q) el.q.value = app.state.q;
 
@@ -320,6 +330,10 @@ function renderAboutView() {
 function setCatalog(catalog) {
   app.catalog = Array.isArray(catalog) ? catalog.filter(r => r && r.id) : [];
   app.byId = new Map(app.catalog.map(r => [r.id, r]));
+  app.aliasOf = aliasMap(app.catalog);
+  // starred topics saved under an id another record has since absorbed follow that record
+  const watch = migrateWatchlist(store.watchlist(), app.byId, app.aliasOf);
+  if (watch.changed) store.setWatchlist(watch.ids);
   recomputeProfileScores();
   app.loaded = true;
 }

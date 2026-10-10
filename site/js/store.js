@@ -69,6 +69,7 @@ export function remove(key) {
 // ---------- watchlist ----------
 export function watchlist() { const w = get('watchlist', []); return new Set(Array.isArray(w) ? w : []); }
 export function isWatched(id) { return watchlist().has(id); }
+export function setWatchlist(ids) { set('watchlist', [...ids].sort()); }
 /** Toggle an id; returns the new watched state. */
 export function toggleWatch(id) {
   const w = watchlist();
