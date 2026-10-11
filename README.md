@@ -153,7 +153,45 @@ The full schema, the merge and lifecycle rules, the CLI reference and **how to a
 | `data/` | the database, committed daily by the scrape workflow |
 | `electron/` | the desktop app: `main.js` (window), `preload.js` (bridge), `protocol.js` (`app://` and the data fallback) |
 | `scripts/` | `release.js` (versions and tags), `assemble-site.sh` (what Pages publishes) |
-| `branding/` | marks, wordmarks, banner, social image and app icon (`svg/`, `png/`), drawn with the site icons by `python site/icons/make-icons.py` |
+| `branding/` | the logo artwork (`source/`), its traced master vector `svg/sg-logo.svg` (made by `python branding/trace-logo.py`), and the marks, logos, banner, social image and app icon generated from it with the site icons by `python site/icons/make-icons.py` |
+
+## Logo and icons
+
+<img src="branding/svg/sg-logo.svg" alt="SAM's Garage logo" width="360">
+
+The logo is a dark rounded tile with an "S", a teal garage door and a star, next to the words "SAM's" and "Garage".
+Its master copy is the vector [`branding/svg/sg-logo.svg`](branding/svg/sg-logo.svg). Every icon and image the app
+uses is generated from it, so it is the file to edit.
+
+| Part | Color |
+|---|---|
+| Tile | `#031726` |
+| S | `#e8ecf3` |
+| Star | `#eef1f6` |
+| Door (mark teal) | `#11bab6` |
+| "SAM's" | `#01233f` (`#e8ecf3` on dark backgrounds) |
+| "Garage" | `#01b0b1` |
+
+What is generated, by use:
+
+| Use | Files |
+|---|---|
+| PWA install | `site/icons/icon-192.png`, `icon-512.png`, and `-maskable` versions (artwork inside Android's safe zone) |
+| iPhone and iPad home screen | `site/icons/apple-touch-icon.png` (180 px, opaque) |
+| Browser tab and header logo | `site/icons/favicon.ico` (16/32/48), `favicon-32.png`, `icon.svg` |
+| Desktop app | `site/icons/icon.ico` (16–256 px, Windows installer) and `icon-512.png` (macOS, Linux) |
+| Link previews | `site/icons/social-1280x640.png` |
+| Brand kit | `branding/svg/` and `branding/png/`: the logo, the logo for dark backgrounds, one-color black and white marks, a 1024 px app icon and the README banner |
+
+To change the logo, edit `branding/svg/sg-logo.svg` and regenerate everything:
+
+```sh
+python site/icons/make-icons.py
+```
+
+For new artwork, replace `branding/source/sams-garage-logo.png` and trace it first with
+`python branding/trace-logo.py` (it needs `numpy` and the `potrace` Python bindings). Installed copies of the app pick
+up new icons with the next release, which bumps the service worker's version.
 
 ## Install as an app
 
