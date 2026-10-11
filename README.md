@@ -153,7 +153,7 @@ The full schema, the merge and lifecycle rules, the CLI reference and **how to a
 | `data/` | the database, committed daily by the scrape workflow |
 | `electron/` | the desktop app: `main.js` (window), `preload.js` (bridge), `protocol.js` (`app://` and the data fallback) |
 | `scripts/` | `release.js` (versions and tags), `assemble-site.sh` (what Pages publishes) |
-| `branding/` | marks, wordmarks, banner, social image and app icon (`svg/`, `png/`), drawn with the site icons by `python site/icons/make-icons.py` |
+| `branding/` | the logo artwork (`source/`), its traced master vector `svg/sg-logo.svg` (made by `python branding/trace-logo.py`), and the marks, logos, banner, social image and app icon generated from it with the site icons by `python site/icons/make-icons.py` |
 
 ## Install as an app
 
