@@ -1,5 +1,5 @@
 /* SAM's Garage service worker: offline app shell + cached data (PLAN.md §6). */
-const VERSION = 'sg-0.2.0'; // app version; bump via scripts/release.js
+const VERSION = 'sg-0.3.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
 const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
 // Data caches of earlier names, moved into DATA_CACHE on activate (SBIR Portal was the app's name before).

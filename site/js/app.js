@@ -28,7 +28,7 @@ import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
 
-const APP_VERSION = '0.2.0'; // app version; bump via scripts/release.js
+const APP_VERSION = '0.3.0'; // app version; bump via scripts/release.js
 const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
 const WIDE = window.matchMedia('(min-width: 1280px)');   // filters as a column (else a drawer)
 const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side by side (else detail full-screen)
