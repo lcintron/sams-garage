@@ -180,8 +180,8 @@ The build is deterministic. Two builds of the same `data/` are byte-identical ex
   client's retries and User-Agent.
 - `test_model.py` checks the normalization helpers and `validate`.
 
-`scraper/profiles_seed.json` holds the keyword profiles (UAS, Counter-UAS, Acoustic) and the scoring
-weights from the removed `analyze_sbir_hashtags.py`. The site's `profiles.js` is seeded from it.
+The keyword profiles (UAS, Counter-UAS, Acoustic) and their scoring weights, first written for the
+removed `analyze_sbir_hashtags.py`, live in the site's `site/js/profiles.js`.
 
 ## Automation
 
