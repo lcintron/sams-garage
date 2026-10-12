@@ -14,9 +14,9 @@
     },
     "total": 364
   },
-  "last_run": "2026-10-11T12:50:26Z",
+  "last_run": "2026-10-12T15:25:48Z",
   "last_run_events": {
-    "missing": 1,
+    "missing": 0,
     "new": 0,
     "status": 0,
     "updated": 0
@@ -28,7 +28,7 @@
       "failed": 0,
       "fetched": 71,
       "ok": true,
-      "ran_at": "2026-10-11T12:52:39Z",
+      "ran_at": "2026-10-12T15:27:51Z",
       "records": 71
     },
     "grants_gov": {
@@ -37,7 +37,7 @@
       "failed": 0,
       "fetched": 12,
       "ok": true,
-      "ran_at": "2026-10-11T12:52:54Z",
+      "ran_at": "2026-10-12T15:28:07Z",
       "records": 12
     },
     "sbir_gov": {
@@ -46,7 +46,7 @@
       "failed": 0,
       "fetched": 350,
       "ok": true,
-      "ran_at": "2026-10-11T12:50:26Z",
+      "ran_at": "2026-10-12T15:25:48Z",
       "records": 350
     }
   }
