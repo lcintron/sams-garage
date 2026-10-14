@@ -254,8 +254,8 @@ test('scheduler: errors never show a secret (state, status, log, Send test)', as
   const t = await sched.sendTest({ id: 'd', type: 'discord', url: DISCORD });
   const all = JSON.stringify([store.getState(), sched.status(), logs, t]);
   assert.ok(!all.includes('secret-token'), all);
-  assert.match(store.getState().channels.d.error, /[redacted]/);
-  assert.match(t.error, /[redacted]/);
+  assert.match(store.getState().channels.d.error, /\[redacted\]/);
+  assert.match(t.error, /\[redacted\]/);
 });
 
 test('scheduler: the dry run builds each channel report with secrets redacted and sends nothing', async () => {

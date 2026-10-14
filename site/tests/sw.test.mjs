@@ -448,14 +448,14 @@ test('notify: the runner renews its lease before each send, and a stalled data f
   const t0 = Date.now();
   const r = await stall.ctx.SgNotifyRunner.run({ kv: kv2, base: LIVE, owner: 'page:y', fetch: (u, i) => stall.ctx.fetch(u, i), dataTimeoutMs: 50 });
   assert.equal(r.reason, 'data-error');
-  assert.match(r.error, /meta.json: timed out/);
+  assert.match(r.error, /meta\.json: timed out/);
   assert.ok(Date.now() - t0 < 2000);
   assert.equal(await kv2.lock('notify', 'page:z', 1000), true, 'the lock was released');
 });
 
 test('page.js gives each tab its own lock owner', () => {
   const src = fs.readFileSync(path.join(SITE, 'js', 'notify', 'page.js'), 'utf8');
-  assert.match(src, /const OWNER = 'page:' +/);
+  assert.match(src, /const OWNER = 'page:' \+/);
   assert.match(src, /owner: OWNER/);
   assert.doesNotMatch(src, /owner: 'page'/);
 });
