@@ -720,6 +720,8 @@
     }
   }
 
+  const CALLMEBOT_FAILURE = /\bAPI ?Key (?:is )?(?:invalid|not valid|wrong|incorrect)\b|\b(?:invalid|wrong|incorrect) API ?key\b|\bphone(?: number)? (?:is )?not (?:registered|valid|activated|allowed)\b|\bnot (?:yet )?(?:registered|activated)\b|\byou need to (?:get|activate)\b/i;
+
   /** Whether a platform's answer means the message went out: { ok, error }. opaque: a no-cors answer (unknown). */
   function interpretResponse(channel, res) {
     res = res || {};
@@ -727,8 +729,11 @@
     const status = Number(res.status) || 0;
     const body = String(res.body || '').slice(0, 2000);
     if (status < 200 || status >= 300) return { ok: false, error: clip(`HTTP ${status || 'error'}${body ? ': ' + body.replace(/\s+/g, ' ') : ''}`, 300) };
-    if (kindOf(channel) === 'whatsapp:callmebot' && /\b(error|invalid|not (?:allowed|activated))\b/i.test(body.replace(/<[^>]*>/g, ' '))) {
-      return { ok: false, error: clip('CallMeBot: ' + body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), 300) };
+    if (kindOf(channel) === 'whatsapp:callmebot') {
+      // CallMeBot answers 200 with an HTML page either way. Only its own wording for a bad key or an unknown phone, at
+      // the start of the page, means not sent: the rest of a page may well contain words like "error".
+      const head = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (CALLMEBOT_FAILURE.test(head)) return { ok: false, error: clip('CallMeBot: ' + head, 300) };
     }
     return { ok: true, error: null };
   }
@@ -781,7 +786,9 @@
     opts = opts || {};
     const st = isObj(last) ? last : { date: last || null, slot: last || null };
     const today = localDate(now, opts.tzOffset);
-    if (st.date === today) return false;
+    // A report dated today, or later: the clock moved backwards (a manual change, a bad RTC, a VM snapshot). Sending
+    // again would break "never twice a day"; wait until the clock passes that date again.
+    if (st.date && st.date >= today) return false;
     const slot = slotDate(now, opts.time, opts.tzOffset);
     if (st.slot && st.slot >= slot) return slot === today; // checked already: keep watching today, never yesterday again
     return true;
@@ -794,7 +801,7 @@
   function channelDue(now, time, cs, mode, tzOffset) {
     cs = cs || {};
     const today = localDate(now, tzOffset);
-    if (cs.date === today) return false;
+    if (cs.date && cs.date >= today) return false; // sent today (or "later": the clock moved backwards, see isDue)
     if (mode === 'now') return true;
     if (cs.failDate === today) return (cs.tries || 0) < 2;
     return isDue(now, { time, tzOffset }, cs);

@@ -296,6 +296,11 @@ test('interpretResponse: 2xx is sent; errors and CallMeBot error pages are not; 
   assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: '<p>Message queued. You will receive it in a few seconds.</p>' }).ok, true);
   assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: '<b>APIKey is invalid.</b>' }).ok, false);
   assert.equal(N.interpretResponse(CH.slack, { opaque: true }).ok, true);
+  assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: '<p>Message to: +15551234567 queued.</p><p>Error-correcting codes are invalid here.</p>' }).ok, true, 'words in the message are not an error');
+  assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: 'Error-correcting codes for acoustic links' }).ok, true);
+  assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: '<p>Phone number not registered. You need to get the API key first.</p>' }).ok, false);
+  assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: '<p>Wrong API key</p>' }).ok, false);
+  assert.equal(N.interpretResponse(CH.callmebot, { status: 200, body: 'x'.repeat(300) + ' APIKey is invalid' }).ok, true, 'only the start of the page counts');
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -366,6 +371,10 @@ test('isDue: before/after the time, already sent today, catch-up after missed da
   assert.equal(N.isDue(at('2026-10-09', '06:00', -240), opt, { date: '2026-10-05', slot: '2026-10-08' }), false);
   // today's slot checked without sending: keep watching today (new data may still come)
   assert.equal(N.isDue(at('2026-10-09', '09:00', -240), opt, { date: '2026-10-05', slot: '2026-10-09' }), true);
+  // the clock moved backwards: a report dated after today means not due (never a second report on that date)
+  assert.equal(N.isDue(at('2026-10-09', '09:00', -240), opt, '2026-10-12'), false);
+  assert.equal(N.channelDue(at('2026-10-09', '09:00', -240), '08:00', { date: '2026-10-12' }, 'now', -240), false);
+  assert.equal(N.channelDue(at('2026-10-13', '09:00', -240), '08:00', { date: '2026-10-12' }, 'scheduled', -240), true, 'due again once the clock passes it');
 });
 
 test('isDue across DST changes (America/New_York, local time zone of the process)', () => {
