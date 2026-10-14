@@ -98,7 +98,8 @@
         ctx: { publicUrl: env.publicUrl || N.PUBLIC_URL },
         ...loaders(env),
         send: (req, ch) => send(env, req, ch),
-        local: localNotifier(env)
+        local: localNotifier(env),
+        persist: st => env.kv.set(KEYS.state, st) // after every channel: a closed tab mid-run never resends
       });
       await env.kv.set(KEYS.state, res.state);
       if (res.sent && res.state.lastReport) await env.kv.set(KEYS.lastReport, res.state.lastReport);

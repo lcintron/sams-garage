@@ -76,7 +76,8 @@ function createScheduler(o) {
       const res = await N.runDue({
         settings: store.getSettings(), state: store.getState(), now: now(), mode, runtime: 'desktop', ctx,
         watchlist: store.getWatchlist(), profiles: N.allProfiles(store.getProfiles()),
-        loadMeta, loadData, send, local
+        loadMeta, loadData, send, local,
+        persist: st => store.setState(st) // after every channel: a crash mid-run never resends
       });
       store.setState(res.state);
       last = { at: new Date(now()).toISOString(), reason: res.reason, error: res.error || null, results: res.results, trigger: reason };

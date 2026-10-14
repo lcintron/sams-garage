@@ -818,8 +818,10 @@
    *          channelIds?: string[], watchlist?: string[], profiles?: Array, ctx?: object,
    *          loadMeta: () => Promise<{last_run}>, loadData: (meta) => Promise<{records, events}>,
    *          send: (request, channel) => Promise<{ok, status?, error?, opaque?}>,
-   *          local?: (digest) => Promise<{ok, error?}>}} o
+   *          local?: (digest) => Promise<{ok, error?}>, persist?: (state) => Promise|void}} o
    *   local: the device's own notification, checked like a channel (id "__local") when given
+   *   persist: stores the run state; called after every channel's result, so a crash or a closed tab in the middle of
+   *   a run never makes the channels that were already sent go out again
    * @returns {Promise<{state, results: [{id, status, error?}], digest, sent, failed, reason}>}
    *   state is the new run state {channels: {id: {date, at, slot, through, failDate, tries, error}}, lastSent, lastReport,
    *   lastCheck}. A channel's window runs from its last report's data (through = that data's last_run) to now, so a
@@ -842,6 +844,7 @@
     const due = targets.filter(c => channelDue(now, settings.time, state.channels[c.id], mode, tz));
     if (!due.length) { out.reason = targets.length ? 'not-due' : 'no-channels'; return out; }
     const cs = id => (state.channels[id] = state.channels[id] || {});
+    const persist = async () => { if (typeof o.persist === 'function') { try { await o.persist(state); } catch (e) { /* the final state is still returned */ } } };
 
     let meta;
     try { meta = await o.loadMeta(); } catch (e) { out.reason = 'data-error'; out.error = errText(e); return out; }
@@ -849,6 +852,7 @@
     const untilMs = toMs(until);
     const fresh = due.filter(c => { const th = toMs(cs(c.id).through); return th == null || untilMs > th; });
     for (const c of due) if (!fresh.includes(c)) { cs(c.id).slot = slot; out.results.push({ id: c.id, status: 'no-new-data' }); }
+    if (fresh.length < due.length) await persist();
     if (!fresh.length) { out.reason = 'no-new-data'; return out; }
 
     let data;
@@ -861,7 +865,7 @@
         digests.set(since, buildDigest({ records: data.records, events: data.events, since, until, settings, watchlist: o.watchlist, profiles: o.profiles }));
       }
       const d = digests.get(since);
-      if (!d) { Object.assign(st, { slot, through: until }); out.results.push({ id: c.id, status: 'empty' }); continue; }
+      if (!d) { Object.assign(st, { slot, through: until }); out.results.push({ id: c.id, status: 'empty' }); await persist(); continue; }
       let r;
       try {
         if (c.id === LOCAL_ID) r = await o.local(d);
@@ -880,10 +884,11 @@
         out.results.push({ id: c.id, status: 'failed', error: st.error });
         out.failed++;
       }
-    }
-    if (out.sent) {
-      state.lastSent = { date: today, at: iso(now) };
-      state.lastReport = { at: iso(now), digest: out.digest };
+      if (out.sent) {
+        state.lastSent = { date: today, at: iso(now) };
+        state.lastReport = { at: iso(now), digest: out.digest };
+      }
+      await persist();
     }
     out.reason = out.sent ? 'sent' : out.failed ? 'failed' : 'empty';
     return out;

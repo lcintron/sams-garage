@@ -491,6 +491,26 @@ test('runDue: paused, no channels, Send now, and the device notification', async
   assert.equal((await h.run({}, at('2026-10-09', '09:00', -240), { local: async () => ({ ok: true }) })).reason, 'no-channels');
 });
 
+test('runDue: the state is stored after each channel, so a run cut short never resends', async () => {
+  const h = harness();
+  const stored = [];
+  let hang;
+  const cut = h.run({}, at('2026-10-09', '08:05', -240), {
+    persist: st => { stored.push(structuredClone(st)); },
+    send: async (req, ch) => { h.sent.push(ch.id); if (ch.id === 's') return new Promise(r => { hang = r; }); return { ok: true, status: 204 }; } // the process dies here
+  });
+  await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(h.sent, ['d', 's']);
+  const saved = stored[stored.length - 1];
+  assert.equal(saved.channels.d.date, '2026-10-09', 'channel 1 was stored as sent before channel 2 started');
+  assert.equal(saved.lastSent.date, '2026-10-09');
+  const again = await h.run(saved, at('2026-10-09', '08:20', -240));
+  assert.deepEqual(h.sent.slice(2).sort(), ['s', 't'], 'the re-run sends the rest, not channel 1 again');
+  assert.equal(again.sent, 2);
+  hang({ ok: true });
+  await cut;
+});
+
 test('runDue: a data error changes nothing, so the next check tries again', async () => {
   const h = harness();
   const r = await h.run({}, at('2026-10-09', '08:00', -240), { loadMeta: async () => { throw new Error('offline'); } });
