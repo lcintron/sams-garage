@@ -424,6 +424,35 @@ test('notify: two page tabs never share the lock (owners are unique per context)
   assert.equal(await kv.lock('notify', 'page:tab-b', 60000), true);
 });
 
+test('idb lock: the holder renews its lease; others wait for it to expire', async () => {
+  const sw = loadSW({ net: () => ok('x') });
+  const kv = sw.ctx.SgIdb;
+  assert.equal(await kv.lock('r', 'sw:a', 1000, 0), true);
+  assert.equal(await kv.lock('r', 'sw:a', 1000, 900), true, 'renewed until 1900');
+  assert.equal(await kv.lock('r', 'page:b', 1000, 1500), false, 'without the renewal this would have been free');
+  assert.equal(await kv.lock('r', 'page:b', 1000, 1901), true);
+  const run = sw.ctx.SgNotifyRunner;
+  assert.ok(run.LOCK_MS >= 90000, 'covers loading the data (2 x 30 s) before the first renewal');
+});
+
+test('notify: the runner renews its lease before each send, and a stalled data fetch times out', async () => {
+  const live = liveNet();
+  const sw = loadSW({ net: live.net, permission: 'granted' });
+  const kv = await seed(sw);
+  const leases = [];
+  const spy = { ...kv, lock: (n, o, ms) => { leases.push(o); return kv.lock(n, o, ms); } };
+  await sw.ctx.SgNotifyRunner.run({ kv: spy, base: LIVE, owner: 'page:x', fetch: (u, i) => sw.ctx.fetch(u, i), notify: async () => {} });
+  assert.deepEqual(leases, ['page:x', 'page:x', 'page:x'], 'taken once, renewed before Discord and before the device notification');
+  const stall = loadSW({ net: (url, req) => new Promise((_, reject) => req.signal.addEventListener('abort', () => reject(new Error('aborted')))) });
+  const kv2 = await seed(stall);
+  const t0 = Date.now();
+  const r = await stall.ctx.SgNotifyRunner.run({ kv: kv2, base: LIVE, owner: 'page:y', fetch: (u, i) => stall.ctx.fetch(u, i), dataTimeoutMs: 50 });
+  assert.equal(r.reason, 'data-error');
+  assert.match(r.error, /meta.json: timed out/);
+  assert.ok(Date.now() - t0 < 2000);
+  assert.equal(await kv2.lock('notify', 'page:z', 1000), true, 'the lock was released');
+});
+
 test('page.js gives each tab its own lock owner', () => {
   const src = fs.readFileSync(path.join(SITE, 'js', 'notify', 'page.js'), 'utf8');
   assert.match(src, /const OWNER = 'page:' +/);

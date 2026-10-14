@@ -11,14 +11,26 @@
   'use strict';
   const KEYS = { settings: 'notify-settings', state: 'notify-state', lastReport: 'notify-last-report', watchlist: 'watchlist', profiles: 'profiles' };
   const LOCK = 'notify';
-  const LOCK_MS = 2 * 60000;
+  // The lease covers the longest stretch between two renewals: loading the data (meta.json, then the rest in
+  // parallel: 2 x DATA_TIMEOUT_MS at most) before the first send, or one send (SEND_TIMEOUT_MS). It is renewed before
+  // every send, so a long run keeps it, and a crashed one frees it within LOCK_MS.
+  const DATA_TIMEOUT_MS = 30000;
   const SEND_TIMEOUT_MS = 20000;
+  const LOCK_MS = 2 * DATA_TIMEOUT_MS + 30000;
   const TAG = 'sg-daily-report';
 
   async function fetchJSON(env, rel) {
-    const res = await env.fetch(new URL('data/' + rel, env.base).href, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`data/${rel}: HTTP ${res.status}`);
-    return res.json();
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const ms = env.dataTimeoutMs || DATA_TIMEOUT_MS;
+    let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => { if (ctl) ctl.abort(); reject(new Error(`data/${rel}: timed out`)); }, ms); });
+    try {
+      return await Promise.race([timeout, (async () => {
+        const res = await env.fetch(new URL('data/' + rel, env.base).href, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+        if (!res.ok) throw new Error(`data/${rel}: HTTP ${res.status}`);
+        return res.json();
+      })()]);
+    } finally { clearTimeout(timer); }
   }
 
   /** The live data in the format this app reads (else an error: the page then asks for an update). */
@@ -99,7 +111,8 @@
         ...loaders(env),
         send: (req, ch) => send(env, req, ch),
         local: localNotifier(env),
-        persist: st => env.kv.set(KEYS.state, st) // after every channel: a closed tab mid-run never resends
+        persist: st => env.kv.set(KEYS.state, st), // after every channel: a closed tab mid-run never resends
+        beforeSend: () => env.kv.lock(LOCK, env.owner, LOCK_MS) // renew the lease (re-entrant for its owner)
       });
       await env.kv.set(KEYS.state, res.state);
       if (res.sent && res.state.lastReport) await env.kv.set(KEYS.lastReport, res.state.lastReport);
@@ -118,5 +131,5 @@
     return send(env, req, channel);
   }
 
-  root.SgNotifyRunner = { run, sendTest, send, loaders, KEYS, LOCK, TAG };
+  root.SgNotifyRunner = { run, sendTest, send, loaders, KEYS, LOCK, LOCK_MS, TAG };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

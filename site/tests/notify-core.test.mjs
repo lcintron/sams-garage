@@ -511,6 +511,16 @@ test('runDue: the state is stored after each channel, so a run cut short never r
   await cut;
 });
 
+test('runDue: beforeSend runs before every send; false stops the run', async () => {
+  const h = harness();
+  let calls = 0;
+  const r = await h.run({}, at('2026-10-09', '08:05', -240), { beforeSend: async () => ++calls < 2 });
+  assert.equal(calls, 2);
+  assert.equal(h.sent.length, 1, 'only the send before the lock was lost');
+  assert.equal(r.reason, 'locked');
+  assert.equal(r.results.find(x => x.status === 'skipped').error, 'the lock was lost');
+});
+
 test('runDue: a data error changes nothing, so the next check tries again', async () => {
   const h = harness();
   const r = await h.run({}, at('2026-10-09', '08:00', -240), { loadMeta: async () => { throw new Error('offline'); } });

@@ -818,10 +818,13 @@
    *          channelIds?: string[], watchlist?: string[], profiles?: Array, ctx?: object,
    *          loadMeta: () => Promise<{last_run}>, loadData: (meta) => Promise<{records, events}>,
    *          send: (request, channel) => Promise<{ok, status?, error?, opaque?}>,
-   *          local?: (digest) => Promise<{ok, error?}>, persist?: (state) => Promise|void}} o
+   *          local?: (digest) => Promise<{ok, error?}>, persist?: (state) => Promise|void,
+   *          beforeSend?: (channel) => Promise<boolean>}} o
    *   local: the device's own notification, checked like a channel (id "__local") when given
    *   persist: stores the run state; called after every channel's result, so a crash or a closed tab in the middle of
    *   a run never makes the channels that were already sent go out again
+   *   beforeSend: called before each send (the browser renews its lock there); false stops the run, so a sender that
+   *   lost its lock never sends next to the one that took it over
    * @returns {Promise<{state, results: [{id, status, error?}], digest, sent, failed, reason}>}
    *   state is the new run state {channels: {id: {date, at, slot, through, failDate, tries, error}}, lastSent, lastReport,
    *   lastCheck}. A channel's window runs from its last report's data (through = that data's last_run) to now, so a
@@ -866,6 +869,11 @@
       }
       const d = digests.get(since);
       if (!d) { Object.assign(st, { slot, through: until }); out.results.push({ id: c.id, status: 'empty' }); await persist(); continue; }
+      if (typeof o.beforeSend === 'function' && !(await o.beforeSend(c).catch(() => false))) {
+        out.results.push({ id: c.id, status: 'skipped', error: 'the lock was lost' });
+        out.reason = 'locked';
+        break;
+      }
       let r;
       try {
         if (c.id === LOCAL_ID) r = await o.local(d);
@@ -890,7 +898,7 @@
       }
       await persist();
     }
-    out.reason = out.sent ? 'sent' : out.failed ? 'failed' : 'empty';
+    out.reason = out.reason || (out.sent ? 'sent' : out.failed ? 'failed' : 'empty');
     return out;
   }
 
