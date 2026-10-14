@@ -53,7 +53,7 @@ test('store: secrets are encrypted on disk and come back in clear (round trip)',
   assert.equal(s2.secretsLost(), false);
 });
 
-test('store: without a keychain secrets are stored as they are, flagged; undecryptable ones are dropped', () => {
+test('store: without a keychain secrets are stored as they are, flagged; undecryptable ones read as empty', () => {
   const file = tmp();
   const plain = createStore({ file, N, cipher: cipher(false) });
   plain.saveSettings({ channels: [{ id: 'd', type: 'discord', url: DISCORD }] });
@@ -68,6 +68,44 @@ test('store: without a keychain secrets are stored as they are, flagged; undecry
   assert.equal(other.getSettings().channels[0].url, '');
   assert.equal(other.secretsLost(), true);
   assert.equal(notes.length, 1);
+});
+
+test('store: a secret that fails to decrypt once is kept and comes back when the keychain answers', () => {
+  const file = tmp();
+  createStore({ file, N, cipher: cipher() }).saveSettings({ enabled: true, channels: [{ id: 'd', type: 'discord', url: DISCORD }, CMB] });
+  let fail = true;
+  const flaky = { ...cipher(), decrypt: b => { if (fail) throw new Error('keychain locked'); return cipher().decrypt(b); } };
+  const s1 = createStore({ file, N, cipher: flaky });
+  assert.equal(s1.getSettings().channels[0].url, '');
+  assert.equal(s1.secretsLost(), true);
+  // the app keeps working meanwhile: run state, watchlist and even a settings save leave the blob alone
+  s1.setState({ channels: { d: { date: '2026-10-09' } } });
+  s1.setWatchlist(['x']);
+  s1.saveSettings({ ...s1.getSettings(), time: '09:30' });
+  const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.ok(disk.settings.channels[0].url.$enc, 'the encrypted blob is still on disk');
+  assert.equal(disk.settings.time, '09:30');
+  fail = false;
+  const s2 = createStore({ file, N, cipher: flaky });
+  assert.equal(s2.getSettings().channels[0].url, DISCORD, 'the secret survived');
+  assert.equal(s2.getSettings().channels[1].apikey, '987654');
+  assert.equal(s2.secretsLost(), false);
+});
+
+test('store: writes merge into the file as it is now, and a changed file is read again', () => {
+  const file = tmp();
+  const a = createStore({ file, N, cipher: cipher() });
+  const b = createStore({ file, N, cipher: cipher() });
+  a.saveSettings({ enabled: true, channels: [{ id: 'd', type: 'discord', url: DISCORD }] });
+  assert.equal(b.getSettings().enabled, true, 'b sees what a wrote');
+  b.setState({ channels: { d: { date: '2026-10-09' } } });
+  a.setWatchlist(['w1']); // a's copy of the state is older: it must not overwrite b's
+  assert.equal(createStore({ file, N, cipher: cipher() }).getState().channels.d.date, '2026-10-09');
+  assert.equal(a.getState().channels.d.date, '2026-10-09');
+  assert.deepEqual(b.getWatchlist(), ['w1']);
+  a.reset();
+  assert.ok(!fs.existsSync(file));
+  assert.deepEqual(a.getSettings(), N.defaultSettings());
 });
 
 test('store: watchlist, profiles and run state persist; a damaged file falls back to defaults', () => {
