@@ -10,59 +10,30 @@
  *
  * Pure: no DOM, no storage. User profiles are persisted by store.js and passed in.
  */
+import './notify/core.js';
 
-export const PRESET_PROFILES = Object.freeze([
-  {
-    id: 'uas', name: 'UAS', bonus: 3, preset: true,
-    terms: ['uas', 'uav', 'unmanned aerial', 'uncrewed aerial', 'drone', 'drones', 'aerial system', 'autonomous air']
-  },
-  {
-    id: 'cuas', name: 'Counter-UAS', bonus: 6, preset: true,
-    terms: ['c-uas', 'cuas', 'counter-uas', 'counter uas', 'counter-unmanned', 'counter unmanned', 'counter-drone',
-      'counter drone', 'drone detection', 'detect drones']
-  },
-  {
-    id: 'acoustic', name: 'Acoustic', bonus: 3, preset: true,
-    terms: ['acoustic', 'acoustics', 'audio', 'sound', 'sounds', 'sonar', 'microphone', 'passive sensing']
-  }
-]);
+// The presets, the term matching and the profile definitions live in the notifications engine (notify/core.js, a
+// classic script shared with the service worker, the desktop app and GitHub Actions), so the list and the reports
+// match topics the same way. This module keeps its API: the names below are re-exported from there.
+const N = globalThis.SgNotify;
 
+export const PRESET_PROFILES = N.PRESET_PROFILES;
 export const GENERIC_CONTEXT_TERMS = Object.freeze(['aircraft', 'sensor', 'sensors', 'tracking', 'detection', 'surveillance']);
 export const MAX_CONTEXT_POINTS = 3;
 export const POINTS_PER_TERM = 2;
 
 /** Lowercase and fold hyphens/underscores/whitespace runs to single spaces, so "Counter-UAS" ≈ "counter uas". */
-export function normalizeText(s) {
-  return ' ' + String(s || '').toLowerCase().replace(/[‐-―−]/g, '-').replace(/[-_\s]+/g, ' ').trim() + ' ';
-}
-
-const termCache = new Map();
-/** A regex that finds a term as a whole word or phrase inside normalizeText() output. */
-function termRegex(term) {
-  let re = termCache.get(term);
-  if (!re) {
-    const t = normalizeText(term).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    re = new RegExp('(?<![a-z0-9])' + t + '(?![a-z0-9])');
-    termCache.set(term, re);
-  }
-  return re;
-}
+export const normalizeText = N.normalizeText;
 
 /** Terms from `terms` that occur in the (already normalized) text. */
-export function findTerms(normText, terms) {
-  return terms.filter(t => t && termRegex(t).test(normText));
-}
+export const findTerms = N.findTerms;
 
 /**
  * The searchable text of a record for profile matching: title, summary, description, keywords, technology areas,
- * agency, topic and solicitation numbers (the analyzer's topic_text plus keywords and technology areas). `description` may come from the search-index docs
- * when the catalog record has none.
+ * agency, topic and solicitation numbers (the analyzer's topic_text plus keywords and technology areas). `description`
+ * may come from the search-index docs when the catalog record has none.
  */
-export function recordText(rec, description) {
-  const join = v => (Array.isArray(v) ? v.join(' ') : v || '');
-  return normalizeText([rec.title, rec.agency, rec.sub_agency, rec.topic_number, rec.solicitation_number, rec.summary,
-    description ?? rec.description, join(rec.keywords), join(rec.technology_areas)].filter(Boolean).join(' \n '));
-}
+export const recordText = N.recordText;
 
 /**
  * Score one record against a set of profiles.
@@ -122,14 +93,7 @@ export function rankRecords(records, profiles, descriptions = new Map()) {
 const cmp = (a, b) => String(a || '').localeCompare(String(b || ''));
 
 /** Parse a user's free-form term list (commas or new lines) into clean, deduplicated, lowercase terms. */
-export function parseTerms(text) {
-  const seen = new Set();
-  for (const t of String(text || '').split(/[,\n;]+/)) {
-    const v = t.trim().toLowerCase().replace(/^#/, '');
-    if (v) seen.add(v);
-  }
-  return [...seen];
-}
+export const parseTerms = N.parseTerms;
 
 /** A stable, URL-safe id for a user profile name ("My Sensors!" -> "u-my-sensors"). */
 export function profileId(name, taken = []) {
@@ -140,16 +104,7 @@ export function profileId(name, taken = []) {
 }
 
 /** Validate/normalize a user profile; returns null if unusable. */
-export function normalizeProfile(p) {
-  if (!p || typeof p !== 'object') return null;
-  const name = String(p.name || '').trim().slice(0, 40);
-  const terms = Array.isArray(p.terms) ? parseTerms(p.terms.join(',')) : parseTerms(p.terms);
-  if (!name || !terms.length || !/^u-[a-z0-9-]+$/.test(p.id || '')) return null;
-  const bonus = Math.max(0, Math.min(10, parseInt(p.bonus, 10) || 0));
-  return { id: p.id, name, terms: terms.slice(0, 100), bonus, preset: false };
-}
+export const normalizeProfile = N.normalizeProfile;
 
 /** Presets followed by the user's valid profiles. */
-export function allProfiles(userProfiles = []) {
-  return [...PRESET_PROFILES, ...userProfiles.map(normalizeProfile).filter(Boolean)];
-}
+export const allProfiles = N.allProfiles;
