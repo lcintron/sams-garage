@@ -152,11 +152,13 @@ self.addEventListener('fetch', e => {
 // runs the same check on load and when it becomes visible. js/notify/runner.js does the work; a lock in IndexedDB
 // keeps the page and the worker from sending the same report twice.
 const REPORT_TAG = 'sg-daily-report';
+// This worker's name for the shared lock: unique per worker instance (each page tab has its own too).
+const LOCK_OWNER = 'sw:' + (globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 function backgroundReport(mode) {
   const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
   return SgNotifyRunner.run({
-    kv: SgIdb, base: self.registration.scope, owner: 'sw', mode,
+    kv: SgIdb, base: self.registration.scope, owner: LOCK_OWNER, mode,
     fetch: (url, init) => fetch(url, init),
     notify: granted ? (title, options) => self.registration.showNotification(title, options) : undefined
   }).catch(err => { console.warn('[sg] notification report failed', err); return { reason: 'error', error: String(err) }; });

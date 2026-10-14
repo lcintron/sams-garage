@@ -20,6 +20,8 @@ const DESKTOP = globalThis.sgDesktop && globalThis.sgDesktop.notify ? globalThis
 export const TAG = 'sg-daily-report';
 const PERIODIC_MS = 12 * 3600 * 1000;
 const PREVIEW_DAYS = 7;
+// This page's own name for the shared lock (js/notify/idb.js): unique per tab, so two open tabs never both hold it.
+const OWNER = 'page:' + (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 export const isDesktop = () => !!DESKTOP;
 const appBase = () => new URL('./', location.href.split('#')[0]).href;
@@ -82,7 +84,7 @@ function pageNotifier() {
   };
 }
 
-const env = mode => ({ kv, base: appBase(), owner: 'page', mode, fetch: (u, i) => fetch(u, i), notify: pageNotifier() });
+const env = mode => ({ kv, base: appBase(), owner: OWNER, mode, fetch: (u, i) => fetch(u, i), notify: pageNotifier() });
 
 let lastCheck = 0;
 /** The page's due check (web only; at most every 5 minutes): on load and when the app becomes visible. */

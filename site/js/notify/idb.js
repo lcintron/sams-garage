@@ -15,7 +15,8 @@
   const DB = 'sg', STORE = 'kv', VERSION = 1;
 
   /**
-   * Whether `owner` may take the lock now: it is free, expired, or already theirs. Pure (tested on its own).
+   * Whether `owner` may take the lock now: it is free, expired, or already theirs (re-entrant: the holder renews it).
+   * Owners must be unique per execution context ('page:<uuid>' per tab, 'sw:<uuid>'), never shared. Pure.
    * @param {{owner: string, until: number} | undefined} current
    */
   function canLock(current, owner, now) {

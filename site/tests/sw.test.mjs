@@ -124,7 +124,7 @@ function loadSW({ origin = 'https://user.github.io', scope = '/sams-garage/', ne
   };
   const ctx = vm.createContext({
     self, caches, fetch: fetchFn, Request: SWRequest, Response, URL, URLSearchParams, Promise, console, setTimeout, clearTimeout,
-    AbortController, structuredClone, indexedDB: idb, Notification: { permission }
+    AbortController, structuredClone, crypto: globalThis.crypto, indexedDB: idb, Notification: { permission }
   });
   // importScripts as in a classic worker: the scripts run in the worker's global scope
   ctx.importScripts = (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.join(SITE, f), 'utf8'), ctx, { filename: f }); };
@@ -406,6 +406,29 @@ test('idb lock: free, expired or own leases can be taken; another live lease can
   assert.equal(await kv.update('n', v => (v || 0) + 1), 2);
   await kv.del('n');
   assert.equal(await kv.get('n'), undefined);
+});
+
+test('notify: two page tabs never share the lock (owners are unique per context)', async () => {
+  const live = liveNet();
+  const sw = loadSW({ net: live.net });
+  const kv = await seed(sw);
+  assert.match(sw.ctx.LOCK_OWNER || vm.runInContext('LOCK_OWNER', sw.ctx), /^sw:[0-9a-f-]{8,}/);
+  assert.equal(await kv.lock('notify', 'page:tab-a', 60000), true);
+  assert.equal(await kv.lock('notify', 'page:tab-b', 60000), false, 'another tab is refused');
+  const r = await sw.ctx.SgNotifyRunner.run({ kv, base: LIVE, owner: 'page:tab-b', fetch: (u, i) => sw.ctx.fetch(u, i) });
+  assert.equal(r.reason, 'locked');
+  assert.equal(live.posts.length, 0);
+  await kv.unlock('notify', 'page:tab-b'); // not the holder: no effect
+  assert.equal(await kv.lock('notify', 'page:tab-b', 60000), false);
+  await kv.unlock('notify', 'page:tab-a');
+  assert.equal(await kv.lock('notify', 'page:tab-b', 60000), true);
+});
+
+test('page.js gives each tab its own lock owner', () => {
+  const src = fs.readFileSync(path.join(SITE, 'js', 'notify', 'page.js'), 'utf8');
+  assert.match(src, /const OWNER = 'page:' +/);
+  assert.match(src, /owner: OWNER/);
+  assert.doesNotMatch(src, /owner: 'page'/);
 });
 
 test('notify: a click on the notification focuses the app at the last report, or opens it', async () => {
