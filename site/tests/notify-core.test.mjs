@@ -213,6 +213,68 @@ test('teams: an Adaptive Card 1.4 message with links and an open-app action', ()
   assert.ok(JSON.stringify(p).length < 28000, 'under the Teams message size limit');
 });
 
+test('teams: a running byte budget keeps the card under 24 KB, with "and N more" per section', () => {
+  const huge = bigDigest(15, i => `UAS topic ${i} ` + 'ünïcødé wörds '.repeat(40)); // multi-byte titles, clipped at 250 characters
+  const many = { ...huge, sections: huge.sections.map(s => ({ ...s, items: [...s.items, ...s.items, ...s.items].slice(0, 15) })) };
+  const p = N.format.teams(many, ctx);
+  const bytes = Buffer.byteLength(JSON.stringify(p), 'utf8');
+  assert.ok(bytes <= 24000, 'bytes ' + bytes);
+  const texts = p.attachments[0].content.body.map(b => b.text);
+  const mores = texts.filter(t => /^…and \d+ more in \[SAM's Garage\]/.test(t));
+  assert.ok(mores.length >= 1, 'a section that did not fit says so');
+  for (const kind of ['Starred updates (20)', 'New matches (20)', 'Updated matches (20)']) assert.ok(texts.includes(kind), kind);
+  const shown = texts.filter(t => /^\[UAS topic/.test(t)).length;
+  const more = mores.reduce((n, t) => n + Number(/\d+/.exec(t)[0]), 0);
+  assert.equal(shown + more, 60, 'every topic is either shown or counted');
+  // a small report is untouched
+  const small = N.format.teams(N.sampleDigest(), ctx);
+  assert.ok(!JSON.stringify(small).includes('more in'));
+});
+
+test('discord: a report that needs more than 10 embeds is cut at 10 with the footer on the last one', () => {
+  const one = bigDigest().sections[0];
+  const huge = { ...bigDigest(), sections: Array.from({ length: 14 }, (_, i) => ({ ...one, kind: ['starred', 'new', 'updated'][i % 3], title: 'Section ' + i })) };
+  const p = N.format.discord(huge, ctx);
+  assert.equal(p.embeds.length, 10);
+  assert.ok(p.embeds[9].footer && p.embeds[9].footer.text.startsWith("SAM's Garage"), 'footer intact');
+  let total = 0;
+  for (const e of p.embeds) total += (e.title || '').length + e.description.length + (e.footer ? e.footer.text.length : 0);
+  assert.ok(total <= 6000, 'total ' + total);
+});
+
+test('partial: a window older than the data says some earlier changes are not included, in every format', () => {
+  const records = [rec({ id: 'dsip:A1', title: 'Small UAS swarms' })];
+  const events = [ev('2026-10-09T06:00:00Z', 'dsip:A1', 'new', null, 'open')];
+  const base = { records, events, until: '2026-10-09T06:00:00Z', settings: settings(), dataSince: '2026-09-09T06:00:00Z' };
+  assert.equal(N.buildDigest({ ...base, since: '2026-09-20T00:00:00Z' }).partial, false, 'inside the data');
+  const d = N.buildDigest({ ...base, since: '2026-08-01T00:00:00Z' });
+  assert.equal(d.partial, true);
+  assert.equal(N.buildDigest({ ...base, since: '2026-08-01T00:00:00Z', dataSince: null }).partial, false, 'unknown coverage');
+  const note = N.PARTIAL_NOTE;
+  assert.match(note, /^Some earlier changes are not included; open the app for the full history\.$/);
+  assert.ok(JSON.stringify(N.format.slack(d, ctx)).includes(note));
+  assert.ok(N.format.discord(d, ctx).content.includes(note));
+  assert.ok(JSON.stringify(N.format.teams(d, ctx)).includes(note));
+  assert.ok(N.format.whatsapp(d, ctx).includes(note));
+  assert.ok(N.format.whatsappTemplate(d, ctx).includes(note));
+  assert.ok(N.format.text(d, ctx).includes(note));
+  assert.ok(!N.format.whatsapp(N.buildDigest({ ...base, since: '2026-09-20T00:00:00Z' }), ctx).includes(note));
+});
+
+test('runDue passes where the data starts, so a long-missed channel gets the partial note', async () => {
+  const h = harness();
+  h.events = [ev('2026-10-09T06:15:00Z', 'dsip:A1', 'new', null, 'open')];
+  const r = await h.run({ channels: { d: { through: '2026-08-01T00:00:00Z' } } }, at('2026-10-09', '08:05', -240), {
+    loadData: async () => ({ records: RECORDS, events: h.events, dataSince: '2026-09-09T06:15:00Z' })
+  });
+  assert.equal(r.state.lastReport.digest.partial, true);
+});
+
+test('the Graph API version is one named constant', () => {
+  assert.equal(N.GRAPH_VERSION, 'v21.0');
+  assert.equal(N.GRAPH_BASE, 'https://graph.facebook.com/' + N.GRAPH_VERSION + '/');
+});
+
 test('whatsapp (CallMeBot): plain text, at most 1500 characters, ends with the app link', () => {
   const t = N.format.whatsapp(bigDigest(), ctx);
   assert.ok(t.length <= 1500, t.length);

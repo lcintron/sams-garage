@@ -50,7 +50,8 @@ function createScheduler(o) {
     const desc = new Map((Array.isArray(docs) ? docs : []).map(d => [d.id, d.description || '']));
     return {
       records: (Array.isArray(catalog) ? catalog : []).map(r => (desc.has(r.id) ? { ...r, description: desc.get(r.id) } : r)),
-      events: changes && Array.isArray(changes.events) ? changes.events : []
+      events: changes && Array.isArray(changes.events) ? changes.events : [],
+      dataSince: (changes && changes.since) || null // where changes.json starts: an older window is reported as partial
     };
   }
   /** Send one request; resolves {ok, status, error}. */
@@ -115,7 +116,7 @@ function createScheduler(o) {
     const channels = settings.channels.filter(c => c.enabled).map(c => {
       const cs = state.channels[c.id] || {};
       const since = cs.through || new Date(Date.parse(until) - 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
-      const digest = N.buildDigest({ records: data.records, events: data.events, since, until, settings, watchlist: store.getWatchlist(), profiles: N.allProfiles(store.getProfiles()) });
+      const digest = N.buildDigest({ records: data.records, events: data.events, since, until, dataSince: data.dataSince, settings, watchlist: store.getWatchlist(), profiles: N.allProfiles(store.getProfiles()) });
       const valid = N.validateChannel(c);
       return {
         id: c.id, type: N.kindOf(c), name: c.name, since, until,

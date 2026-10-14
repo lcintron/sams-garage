@@ -30,7 +30,11 @@
   const DATA_FORMAT = 1;
   const APP_NAME = "SAM's Garage";
   const CALLMEBOT_URL = 'https://api.callmebot.com/whatsapp.php';
-  const GRAPH_BASE = 'https://graph.facebook.com/v21.0/';
+  // The Graph API version for WhatsApp Cloud API messages. Meta supports each version for about two years: before
+  // v21.0 is retired, bump it here after checking the /messages template request (buildRequest) against Meta's
+  // changelog. Tests override the base URL, never the version.
+  const GRAPH_VERSION = 'v21.0';
+  const GRAPH_BASE = 'https://graph.facebook.com/' + GRAPH_VERSION + '/';
   const MAX_ITEMS = 15;          // per section
   const MAX_CHANNELS = 20;
   const LOCAL_ID = '__local';    // the OS notification of the device that runs the check (a pseudo-channel)
@@ -367,7 +371,8 @@
    *   records: catalog-like records (with description when available); events: changelog events
    *   {at, id, event, from, to, fields?}; the window is since < at <= until (either end open when null); ids absorbed
    *   by another record (alt_ids) resolve to that record, in events and in the watchlist; profiles: every profile the
-   *   triggers may name (default: the presets).
+   *   triggers may name (default: the presets); dataSince: where the events given start (changes.json "since"): a
+   *   window that starts earlier sets `partial`, and the report says that some earlier changes are not included.
    * @returns {null | {sections: [{kind, title, total, more, items}], counts: {starred, new, updated, total}, since, until}}
    *   A topic appears once, in its highest-priority section: starred > new > updated. Each section lists at most 15.
    */
@@ -378,7 +383,7 @@
     const byId = new Map(), owner = new Map();
     for (const r of o.records || []) if (r && r.id) { byId.set(r.id, r); owner.set(r.id, r.id); }
     for (const r of byId.values()) for (const alt of r.alt_ids || []) if (!owner.has(alt)) owner.set(alt, r.id);
-    const since = toMs(o.since), until = toMs(o.until);
+    const since = toMs(o.since), until = toMs(o.until), dataSince = toMs(o.dataSince);
     const watch = new Set();
     for (const id of o.watchlist || []) { const now = owner.get(id); if (now) watch.add(now); }
     const terms = triggerTerms(settings, o.profiles);
@@ -421,7 +426,9 @@
       }),
       counts,
       since: since == null ? null : iso(since),
-      until: until == null ? null : iso(until)
+      until: until == null ? null : iso(until),
+      // the window starts before the oldest event the data holds (changes.json keeps 30 days): say so in the report
+      partial: since != null && dataSince != null && since < dataSince
     };
   }
 
@@ -470,6 +477,7 @@
   }
   const headline = d => (d.test ? 'Test message from ' + APP_NAME : APP_NAME + ': ' + countPhrase(d));
   const throughLine = d => (d.until ? 'Changes through ' + fmtDate(d.until) : '');
+  const PARTIAL_NOTE = 'Some earlier changes are not included; open the app for the full history.';
 
   /** What changed, in words. */
   function changeText(it) {
@@ -505,6 +513,7 @@
       { type: 'header', text: { type: 'plain_text', text: clip(d.test ? 'Test message from ' + APP_NAME : APP_NAME + ' daily report', 150), emoji: false } },
       { type: 'context', elements: [mr(slackEsc(clip([countPhrase(d), throughLine(d)].filter(Boolean).join(' · '), 2900)))] }
     ];
+    if (d.partial) blocks.push({ type: 'context', elements: [mr(`_${slackEsc(PARTIAL_NOTE)}_ <${baseOf(ctx)}|Open ${slackEsc(APP_NAME)}>`)] });
     const tail = [{ type: 'divider' }, { type: 'context', elements: [mr(`<${baseOf(ctx)}|Open ${slackEsc(APP_NAME)}> · <${settingsLink(ctx)}|Notification settings>`)] }];
     const body = [];
     for (const sec of d.sections) {
@@ -566,7 +575,7 @@
     return {
       username: APP_NAME,
       avatar_url: baseOf(ctx) + 'icons/icon-192.png',
-      content: clip(`**${discordEsc(headline(d))}** · <${baseOf(ctx)}>`, 2000),
+      content: clip(`**${discordEsc(headline(d))}** · <${baseOf(ctx)}>` + (d.partial ? `\n*${PARTIAL_NOTE}*` : ''), 2000),
       embeds,
       allowed_mentions: { parse: [] }
     };
@@ -575,19 +584,42 @@
   // ---- Microsoft Teams (Adaptive Card 1.4 through a Workflows webhook) ----
   const teamsEsc = s => String(s == null ? '' : s).replace(/\[/g, '(').replace(/\]/g, ')').replace(/[*_]/g, ' ').replace(/\s{2,}/g, ' ');
 
+  // A Workflows webhook takes about 28 KB; the card stays under TEAMS_BYTES (UTF-8) and says "and N more" past it.
+  const TEAMS_BYTES = 24000;
+  const utf8Len = s => (typeof TextEncoder === 'function' ? new TextEncoder().encode(s).length : unescape(encodeURIComponent(s)).length);
+
   function teams(d, ctx) {
     const body = [
       { type: 'TextBlock', text: d.test ? 'Test message from ' + APP_NAME : APP_NAME + ' daily report', size: 'Large', weight: 'Bolder', wrap: true },
       { type: 'TextBlock', text: [countPhrase(d), throughLine(d)].filter(Boolean).join(' · '), isSubtle: true, spacing: 'None', wrap: true }
     ];
+    if (d.partial) body.push({ type: 'TextBlock', text: PARTIAL_NOTE, isSubtle: true, wrap: true, spacing: 'Small' });
+    const moreBlock = (n, kind) => ({ type: 'TextBlock', text: `…and ${n} more in [${APP_NAME}](${sectionLink(ctx, kind)})`, wrap: true, isSubtle: true });
+    const size = v => utf8Len(JSON.stringify(v)) + 1;
+    const MORE_RESERVE = 300; // room kept for each section's "and N more" line
+    let used = size(card([...body], ctx)) + MORE_RESERVE * d.sections.length;
     for (const sec of d.sections) {
-      body.push({ type: 'TextBlock', text: `${sec.title} (${sec.total})`, weight: 'Bolder', size: 'Medium', separator: true, spacing: 'Medium', wrap: true });
+      const title = { type: 'TextBlock', text: `${sec.title} (${sec.total})`, weight: 'Bolder', size: 'Medium', separator: true, spacing: 'Medium', wrap: true };
+      body.push(title);
+      used += size(title);
+      let shown = 0;
       for (const it of sec.items) {
-        body.push({ type: 'TextBlock', text: `[${teamsEsc(clip(it.title, 250))}](${linkFor(ctx, it)})`, wrap: true, spacing: 'Small' });
-        body.push({ type: 'TextBlock', text: teamsEsc(clip(detailLine(it), 600)), isSubtle: true, size: 'Small', wrap: true, spacing: 'None' });
+        const pair = [
+          { type: 'TextBlock', text: `[${teamsEsc(clip(it.title, 250))}](${linkFor(ctx, it)})`, wrap: true, spacing: 'Small' },
+          { type: 'TextBlock', text: teamsEsc(clip(detailLine(it), 600)), isSubtle: true, size: 'Small', wrap: true, spacing: 'None' }
+        ];
+        const cost = size(pair[0]) + size(pair[1]);
+        if (used + cost > TEAMS_BYTES) break;
+        body.push(...pair);
+        used += cost;
+        shown++;
       }
-      if (sec.more) body.push({ type: 'TextBlock', text: `…and ${sec.more} more in [${APP_NAME}](${sectionLink(ctx, sec.kind)})`, wrap: true, isSubtle: true });
+      if (sec.total > shown) body.push(moreBlock(sec.total - shown, sec.kind));
     }
+    return card(body, ctx);
+  }
+
+  function card(body, ctx) {
     return {
       type: 'message',
       attachments: [{
@@ -611,7 +643,7 @@
 
   function whatsapp(d, ctx) {
     const end = `\n\nOpen ${APP_NAME}: ${baseOf(ctx)}`;
-    let out = `*${headline(d)}*` + (throughLine(d) ? '\n' + throughLine(d) : '');
+    let out = `*${headline(d)}*` + (throughLine(d) ? '\n' + throughLine(d) : '') + (d.partial ? `\n_${PARTIAL_NOTE}_` : '');
     let full = true;
     for (const sec of d.sections) {
       const head = `\n\n*${sec.title} (${sec.total})*`;
@@ -637,7 +669,7 @@
   function whatsappTemplate(d, ctx) {
     const link = ` More: ${baseOf(ctx)}`;
     const oneLine = s => String(s).replace(/[\r\n\t]+/g, ' ').replace(/ {4,}/g, '   ').trim();
-    let out = oneLine(d.test ? 'Test message from ' + APP_NAME + '.' : countPhrase(d) + '.');
+    let out = oneLine(d.test ? 'Test message from ' + APP_NAME + '.' : countPhrase(d) + '.' + (d.partial ? ' ' + PARTIAL_NOTE : ''));
     const room = TEMPLATE_MAX - link.length;
     let shown = 0;
     for (const sec of d.sections) {
@@ -655,7 +687,7 @@
 
   /** Plain text (logs, the dry run). */
   function text(d, ctx) {
-    const lines = [headline(d), throughLine(d)].filter(Boolean);
+    const lines = [headline(d), throughLine(d), d.partial ? PARTIAL_NOTE : ''].filter(Boolean);
     for (const sec of d.sections) {
       lines.push('', `${sec.title} (${sec.total})`);
       for (const it of sec.items) lines.push(`- ${it.title}`, `  ${detailLine(it)}`, `  ${linkFor(ctx, it)}`);
@@ -823,7 +855,7 @@
    * Check every channel and send the report where it is due. All I/O comes in:
    * @param {{settings, state, now?, tzOffset?, mode?: 'scheduled'|'now', runtime?: 'browser'|'desktop'|'actions',
    *          channelIds?: string[], watchlist?: string[], profiles?: Array, ctx?: object,
-   *          loadMeta: () => Promise<{last_run}>, loadData: (meta) => Promise<{records, events}>,
+   *          loadMeta: () => Promise<{last_run}>, loadData: (meta) => Promise<{records, events, dataSince?}>,
    *          send: (request, channel) => Promise<{ok, status?, error?, opaque?}>,
    *          local?: (digest) => Promise<{ok, error?}>, persist?: (state) => Promise|void,
    *          beforeSend?: (channel) => Promise<boolean>}} o
@@ -875,7 +907,7 @@
       const st = cs(c.id);
       const since = st.through || iso(untilMs - DAY_MS);
       if (!digests.has(since)) {
-        digests.set(since, buildDigest({ records: data.records, events: data.events, since, until, settings, watchlist: o.watchlist, profiles: o.profiles }));
+        digests.set(since, buildDigest({ records: data.records, events: data.events, since, until, dataSince: data.dataSince, settings, watchlist: o.watchlist, profiles: o.profiles }));
       }
       const d = digests.get(since);
       if (!d) { Object.assign(st, { slot, through: until }); out.results.push({ id: c.id, status: 'empty' }); await persist(); continue; }
@@ -913,7 +945,7 @@
   }
 
   root.SgNotify = {
-    PUBLIC_URL, DATA_FORMAT, APP_NAME, CALLMEBOT_URL, GRAPH_BASE, MAX_ITEMS, LOCAL_ID, TYPES, PROVIDERS, FIELDS, KIND_LABELS,
+    PUBLIC_URL, DATA_FORMAT, APP_NAME, CALLMEBOT_URL, GRAPH_VERSION, GRAPH_BASE, MAX_ITEMS, PARTIAL_NOTE, LOCAL_ID, TYPES, PROVIDERS, FIELDS, KIND_LABELS,
     SECTION_TITLES, STATUS_LABELS,
     normalizeText, cleanTerm, termRegex, findTerms, recordText,
     PRESET_PROFILES, parseTerms, normalizeProfile, allProfiles,

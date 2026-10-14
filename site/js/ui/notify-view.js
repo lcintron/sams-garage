@@ -280,6 +280,7 @@ const payload = (title, d, fn) => h('div', null, h('h3', { text: title }), h('pr
 function digestView(d) {
   return h('div', { class: 'nf-report' },
     h('p', { class: 'nf-headline', text: N.format.headline(d) + (d.until ? ' · changes through ' + fmtDate(d.until.slice(0, 10)) : '') }),
+    d.partial ? h('p', { class: 'small warn-text', text: N.PARTIAL_NOTE }) : null,
     d.sections.map(sec => h('div', { class: 'nf-rsec' },
       h('h3', { text: `${sec.title} (${sec.total})` }),
       h('ul', null, sec.items.map(it => h('li', null,

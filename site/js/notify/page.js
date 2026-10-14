@@ -117,7 +117,7 @@ export async function preview(settings, { catalog, descriptions }) {
   const changes = await res.json();
   const records = descriptions ? catalog.map(r => (descriptions.has(r.id) ? { ...r, description: descriptions.get(r.id) } : r)) : catalog;
   return N.buildDigest({
-    records, events: changes.events || [], since: Date.now() - PREVIEW_DAYS * 86400000, until: null, settings,
+    records, events: changes.events || [], since: Date.now() - PREVIEW_DAYS * 86400000, until: null, dataSince: changes.since || null, settings,
     watchlist: [...store.watchlist()], profiles: N.allProfiles(store.userProfiles())
   });
 }

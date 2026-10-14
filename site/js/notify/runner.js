@@ -49,7 +49,7 @@
         ]);
         const desc = new Map((Array.isArray(docs) ? docs : []).map(d => [d.id, d.description || '']));
         const records = (Array.isArray(catalog) ? catalog : []).map(r => (desc.has(r.id) ? { ...r, description: desc.get(r.id) } : r));
-        return { records, events: (changes && Array.isArray(changes.events)) ? changes.events : [] };
+        return { records, events: (changes && Array.isArray(changes.events)) ? changes.events : [], dataSince: (changes && changes.since) || null };
       }
     };
   }
