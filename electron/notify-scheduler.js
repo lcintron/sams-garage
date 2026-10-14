@@ -73,6 +73,7 @@ function createScheduler(o) {
   function check(reason = 'timer', mode = 'scheduled') {
     if (running) return running;
     running = (async () => {
+      const secrets = N.secretValues(store.getSettings()); // this check's secrets: redacted from everything kept or shown
       const res = await N.runDue({
         settings: store.getSettings(), state: store.getState(), now: now(), mode, runtime: 'desktop', ctx,
         watchlist: store.getWatchlist(), profiles: N.allProfiles(store.getProfiles()),
@@ -80,6 +81,9 @@ function createScheduler(o) {
         persist: st => store.setState(st) // after every channel: a crash mid-run never resends
       });
       store.setState(res.state);
+      const clean = v => (v == null ? v : N.redact(v, secrets));
+      res.error = clean(res.error);
+      for (const r of res.results) r.error = clean(r.error);
       last = { at: new Date(now()).toISOString(), reason: res.reason, error: res.error || null, results: res.results, trigger: reason };
       if (res.results.length || res.error) {
         const parts = res.results.map(r => `${r.id} ${r.status}${r.error ? ' (' + r.error + ')' : ''}`);
@@ -94,7 +98,8 @@ function createScheduler(o) {
   async function sendTest(channel) {
     const v = N.validateChannel(channel);
     if (!v.ok) return { ok: false, error: v.errors.map(e => e.message).join(' ') };
-    return send(N.buildRequest(channel, N.sampleDigest(now()), ctx), N.normalizeChannel(channel));
+    const r = await send(N.buildRequest(channel, N.sampleDigest(now()), ctx), N.normalizeChannel(channel));
+    return { ...r, error: r.error == null ? r.error : N.redact(r.error, N.secretValues({ channels: [channel, ...store.getSettings().channels] })) };
   }
 
   /**

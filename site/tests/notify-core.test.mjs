@@ -521,6 +521,17 @@ test('runDue: beforeSend runs before every send; false stops the run', async () 
   assert.equal(r.results.find(x => x.status === 'skipped').error, 'the lock was lost');
 });
 
+test('runDue: errors that quote a secret are redacted before they are stored or returned', async () => {
+  const h = harness({ fail: () => false });
+  const r = await h.run({}, at('2026-10-09', '08:05', -240), {
+    send: async (req, ch) => (ch.id === 'd' ? { ok: false, error: 'POST ' + req.url + ' failed' } : (() => { throw new Error('connect ' + CH.slack.url); })())
+  });
+  const text = JSON.stringify(r);
+  assert.ok(!text.includes(CH.discord.url) && !text.includes(CH.slack.url) && !text.includes('secret'), text);
+  assert.equal(r.state.channels.d.error, 'POST [redacted] failed');
+  assert.equal(r.state.channels.s.error, 'connect [redacted]');
+});
+
 test('runDue: a data error changes nothing, so the next check tries again', async () => {
   const h = harness();
   const r = await h.run({}, at('2026-10-09', '08:00', -240), { loadMeta: async () => { throw new Error('offline'); } });

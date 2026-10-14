@@ -243,6 +243,21 @@ test('scheduler: Send test sends the sample to one channel and changes no state'
   assert.equal((await sched.sendTest({ type: 'discord', url: 'nope' })).ok, false);
 });
 
+test('scheduler: errors never show a secret (state, status, log, Send test)', async () => {
+  const w = world();
+  const logs = [];
+  const store = createStore({ file: tmp(), N, cipher: cipher() });
+  store.saveSettings({ enabled: true, time: '08:00', triggers: { keywords: ['uas'] }, channels: [{ id: 'd', type: 'discord', url: DISCORD }] });
+  const fetch = async (url, init) => { if (url === DISCORD) throw new Error('getaddrinfo failed for ' + DISCORD); return w.fetch(url, init); };
+  const sched = createScheduler({ N, store, fetch, liveBase: LIVE, now: () => T('2026-10-09', '09:00'), log: m => logs.push(m) });
+  await sched.check();
+  const t = await sched.sendTest({ id: 'd', type: 'discord', url: DISCORD });
+  const all = JSON.stringify([store.getState(), sched.status(), logs, t]);
+  assert.ok(!all.includes('secret-token'), all);
+  assert.match(store.getState().channels.d.error, /[redacted]/);
+  assert.match(t.error, /[redacted]/);
+});
+
 test('scheduler: the dry run builds each channel report with secrets redacted and sends nothing', async () => {
   const w = world();
   const { sched, store } = setup(w, { now: T('2026-10-09', '09:00') });

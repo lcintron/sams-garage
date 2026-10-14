@@ -837,6 +837,9 @@
     const tz = o.tzOffset;
     const state = cloneState(o.state);
     state.lastCheck = iso(now);
+    // errors can quote a request (a webhook URL, a key): every one is redacted before it is stored or returned
+    const secrets = secretValues(settings);
+    const safe = e => clip(redact(typeof e === 'string' ? e : errText(e), secrets), 300);
     const out = { state, results: [], digest: null, sent: 0, failed: 0, reason: '' };
     if (!settings.enabled && mode === 'scheduled') { out.reason = 'paused'; return out; }
     const today = localDate(now, tz);
@@ -850,7 +853,7 @@
     const persist = async () => { if (typeof o.persist === 'function') { try { await o.persist(state); } catch (e) { /* the final state is still returned */ } } };
 
     let meta;
-    try { meta = await o.loadMeta(); } catch (e) { out.reason = 'data-error'; out.error = errText(e); return out; }
+    try { meta = await o.loadMeta(); } catch (e) { out.reason = 'data-error'; out.error = safe(e); return out; }
     const until = (meta && meta.last_run) || iso(now);
     const untilMs = toMs(until);
     const fresh = due.filter(c => { const th = toMs(cs(c.id).through); return th == null || untilMs > th; });
@@ -859,7 +862,7 @@
     if (!fresh.length) { out.reason = 'no-new-data'; return out; }
 
     let data;
-    try { data = await o.loadData(meta); } catch (e) { out.reason = 'data-error'; out.error = errText(e); return out; }
+    try { data = await o.loadData(meta); } catch (e) { out.reason = 'data-error'; out.error = safe(e); return out; }
     const digests = new Map();
     for (const c of fresh) {
       const st = cs(c.id);
@@ -878,7 +881,7 @@
       try {
         if (c.id === LOCAL_ID) r = await o.local(d);
         else r = await o.send(buildRequest(c, d, o.ctx), c);
-      } catch (e) { r = { ok: false, error: errText(e) }; }
+      } catch (e) { r = { ok: false, error: safe(e) }; }
       r = r || { ok: false, error: 'no answer' };
       if (r.ok) {
         Object.assign(st, { slot, through: until, date: today, at: iso(now), failDate: null, tries: 0, error: null, opaque: !!r.opaque });
@@ -888,7 +891,7 @@
       } else {
         const tries = st.failDate === today ? (st.tries || 0) + 1 : 1;
         // the window stays where it was (a first report keeps the start it was given), so nothing is lost
-        Object.assign(st, { slot, failDate: today, tries, error: clip(r.error || 'failed', 300), through: st.through || since });
+        Object.assign(st, { slot, failDate: today, tries, error: safe(r.error || 'failed'), through: st.through || since });
         out.results.push({ id: c.id, status: 'failed', error: st.error });
         out.failed++;
       }
