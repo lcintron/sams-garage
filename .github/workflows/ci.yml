@@ -74,4 +74,4 @@ jobs:
       - name: Syntax checks (desktop app and scripts)
         run: |
           bash -n scripts/assemble-site.sh
-          for f in electron/*.js scripts/*.js; do node --check "$f"; done
+          for f in electron/*.js scripts/*.js scripts/*.mjs; do node --check "$f"; done

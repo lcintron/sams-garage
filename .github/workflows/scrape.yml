@@ -7,6 +7,10 @@ name: Scrape and deploy
 #   * "Nothing changed" is not an error, and the site is redeployed anyway so meta.json's build time
 #     stays fresh.
 #   * The push uses GITHUB_TOKEN, which starts no other workflow run.
+#   * Then the daily notification report (scripts/notify.mjs) goes out for the events of this run, to the channels in
+#     the SG_NOTIFY_CONFIG repository secret (none set: nothing happens). Only the scheduled run sends, or a manual
+#     run with "notify" ticked, so a run started by hand never sends the day's report twice. A channel that cannot be
+#     reached is a warning, never a failed workflow.
 # Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
 on:
   schedule:
@@ -17,6 +21,11 @@ on:
         description: Per-source record cap (debug; empty = no cap)
         required: false
         default: ''
+      notify:
+        description: Send the notification report for this run (SG_NOTIFY_CONFIG)
+        type: boolean
+        required: false
+        default: false
 
 env:
   # The public site's address (link previews, the desktop app's shared links): scripts/site-url.sh.
@@ -88,6 +97,19 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.notify)
+        with:
+          node-version: 22
+          package-manager-cache: false   # no lock file; the script needs no npm install
+      - name: Send notifications
+        # The events of this run only (changelog "at" == meta.json last_run): see scripts/notify.mjs. The secret reaches
+        # the script only through the environment; the script masks every webhook URL, key and token it contains.
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.notify)
+        continue-on-error: true
+        env:
+          SG_NOTIFY_CONFIG: ${{ secrets.SG_NOTIFY_CONFIG }}
+        run: node scripts/notify.mjs
       - name: Summary
         if: always()
         run: python -m scraper status >> "$GITHUB_STEP_SUMMARY" || true
