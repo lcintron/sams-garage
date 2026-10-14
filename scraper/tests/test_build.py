@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scraper.build import build, id_safe
+from scraper.build import build, changes, id_safe
 from scraper.merge import run_merge
 from scraper.sources.base import SourceResult
 from scraper.store import DataDir
@@ -60,7 +60,7 @@ def test_build_artifacts(tmp_path):
     _seed(tmp_path / "data")
     sizes = build(tmp_path / "data", tmp_path / "site", build_time=NOW)
     out = tmp_path / "site"
-    assert set(sizes) == {"catalog.json", "search-index.json", "agencies.json", "meta.json", "solicitations.sqlite"}
+    assert set(sizes) == {"catalog.json", "search-index.json", "agencies.json", "changes.json", "meta.json", "solicitations.sqlite"}
 
     catalog = json.loads((out / "catalog.json").read_text(encoding="utf-8"))
     assert [entry["id"] for entry in catalog] == ["dsip:ARM26-001", "grants:359671"]
@@ -116,3 +116,40 @@ def test_sqlite_schema_and_views(tmp_path):
         assert connection.execute("SELECT count(*) FROM changelog WHERE event = 'new'").fetchone() == (2,)
     finally:
         connection.close()
+
+
+def test_changes_json_holds_the_last_30_days_of_events(tmp_path):
+    _seed(tmp_path / "data")
+    data = DataDir(tmp_path / "data")
+    data.append_changelog([
+        {"at": "2026-09-01T06:15:00Z", "id": "dsip:ARM26-001", "event": "updated", "from": "a", "to": "b", "fields": ["description"]},  # > 30 days
+        {"at": "2026-09-09T06:15:00Z", "id": "dsip:ARM26-001", "event": "updated", "from": "b", "to": "c", "fields": ["keywords"]},     # exactly 30 days: out
+        {"at": "2026-09-09T06:15:01Z", "id": "sbirgov:13020", "event": "status", "from": "pre_release", "to": "open"},                  # an alt id: kept as is
+        {"at": "2026-10-10T06:15:00Z", "id": "dsip:ARM26-001", "event": "missing", "from": "open", "to": None},                        # after last_run
+    ])
+    build(tmp_path / "data", tmp_path / "site", build_time=NOW)
+    out = json.loads((tmp_path / "site" / "changes.json").read_text(encoding="utf-8"))
+    assert out["last_run"] == "2026-10-09T06:15:00Z" and out["since"] == "2026-09-09T06:15:00Z"
+    assert [(event["at"], event["id"], event["event"]) for event in out["events"]] == [
+        ("2026-09-09T06:15:01Z", "sbirgov:13020", "status"),
+        ("2026-10-09T06:15:00Z", "dsip:ARM26-001", "new"),
+        ("2026-10-09T06:15:00Z", "grants:359671", "new"),
+    ]
+    # the changelog.jsonl shape: fields only on "updated" events
+    assert out["events"][0] == {"at": "2026-09-09T06:15:01Z", "id": "sbirgov:13020", "event": "status", "from": "pre_release", "to": "open"}
+
+
+def test_changes_is_deterministic_and_sorted():
+    events = [
+        {"at": "2026-10-09T06:15:00Z", "id": "b", "event": "updated", "from": "1", "to": "2", "fields": ["title"]},
+        {"at": "2026-10-09T06:15:00Z", "id": "b", "event": "status", "from": "open", "to": "closed"},
+        {"at": "2026-10-08T06:15:00Z", "id": "c", "event": "new", "from": None, "to": "open"},
+        {"at": "2026-10-09T06:15:00Z", "id": "a", "event": "new", "from": None, "to": "open"},
+    ]
+    meta = {"last_run": "2026-10-09T06:15:00Z"}
+    first = changes(events, meta)
+    assert first == changes(list(reversed(events)), meta)
+    assert [(event["id"], event["event"]) for event in first["events"]] == [("c", "new"), ("a", "new"), ("b", "status"), ("b", "updated")]
+    # no last_run: the newest event ends the window; no events at all: an empty list
+    assert changes(events, {})["last_run"] == "2026-10-09T06:15:00Z"
+    assert changes([], {}) == {"last_run": None, "since": None, "events": []}

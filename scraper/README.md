@@ -145,9 +145,11 @@ Politeness: every request goes through `scraper/http.py`, which provides:
 | `search-index.json` | **An array of documents, not a serialized MiniSearch index.** Each document is `{id, title, summary, keywords (space-joined), technology_areas (technology areas plus DSIP focus areas, space-joined), topic_number, solicitation_number, agency, sub_agency, description (first 4,000 characters)}`. The site builds the MiniSearch index in the browser, which is fast for a few thousand documents, and joins on `id`. Emitting MiniSearch's internal serialized format from Python would tie us to its private layout. |
 | `solicitations.sqlite` | Tables `solicitations` (scalar columns plus JSON-text `phases`, `keywords`, `technology_areas`, `alt_ids` and `extra`, and `url_<link>` columns), `keywords(id, keyword)`, `changelog(at, id, event, from_value, to_value, fields)` and `meta(key, value)`. Views `open_now` and `closing_soon` (open and closing within 14 days of `date('now')`). |
 | `agencies.json` | `[{code, name, count, by_status, sub_agencies: [{code, name, count}]}]`. |
+| `changes.json` | `{last_run, since, events}`: the changelog events of the 30 days up to `meta.last_run` (`since` exclusive), in their `changelog.jsonl` shape, sorted by time, id and kind. The notification reports read it (README "Notifications"). Added in site format 1: an added file needs no format bump. |
 
 The build is deterministic. Two builds of the same `data/` are byte-identical except for
-`meta.json`'s `build_time`, which honors `SOURCE_DATE_EPOCH`.
+`meta.json`'s `build_time`, which honors `SOURCE_DATE_EPOCH`. `changes.json`'s window ends at the data's `last_run`,
+never at the clock.
 
 ## Adding a source
 
@@ -175,7 +177,7 @@ The build is deterministic. Two builds of the same `data/` are byte-identical ex
 - `test_merge.py` covers the lifecycle: new records, status changes, closing on a passed close date,
   `missing` logged once, failed and partial sources never closing anything, partial details, and dedupe
   (including a DSIP topic that appears after sbir.gov has already listed it).
-- `test_build.py` checks the artifact contents, the SQLite schema and views, and byte-identical rebuilds.
+- `test_build.py` checks the artifact contents (including `changes.json`'s window and order), the SQLite schema and views, and byte-identical rebuilds.
 - `test_cli_http.py` checks the CLI's exit codes, that a crashing source is contained, and the HTTP
   client's retries and User-Agent.
 - `test_model.py` checks the normalization helpers and `validate`.
@@ -187,7 +189,7 @@ removed `analyze_sbir_hashtags.py`, live in the site's `site/js/profiles.js`.
 
 The workflows live in `.github/workflows/`:
 
-- `scrape.yml` runs daily at 06:15 UTC and can be started manually with an optional `limit`. It scrapes, validates and commits `data/`. The deploy job then publishes Pages: the code of the latest release tag with the data of that exact commit.
+- `scrape.yml` runs daily at 06:15 UTC and can be started manually with an optional `limit`. It scrapes, validates and commits `data/`, then (scheduled runs, or manual runs with `notify` ticked) sends the notification reports for that run's events with `scripts/notify.mjs` and the `SG_NOTIFY_CONFIG` secret. The deploy job then publishes Pages: the code of the latest release tag with the data of that exact commit.
 - Every Pages deploy (`scrape.yml`, `release.yml`, and `pages.yml` by hand) goes through `scripts/assemble-site.sh <code-ref> <data-ref>`: it takes `site/` and `scraper/` from the code ref, `data/` from the data ref, runs `python -m scraper build --out site/data` with the code ref's scraper, and leaves out `site/tests`, `site/icons/make-icons.py` and `site/package.json`, so development files are never published.
 - `release.yml` (by hand) tags a release, builds the desktop installers, each with a `site/data` snapshot built from the newest `data/` on main, and deploys Pages.
 - `ci.yml` runs pytest, the data validation, a build smoke test, a dry run of the site assembly, a check that the latest release's scraper still builds the data (once there is a release), and the site's `npm test`.
