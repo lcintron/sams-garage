@@ -1,4 +1,7 @@
-/* SAM's Garage service worker: offline app shell + cached data (PLAN.md §6). */
+/* SAM's Garage service worker: offline app shell + cached data (PLAN.md §6), and the browser's daily notification
+ * report (PLAN.md "Notifications"). A classic worker on purpose: module service workers would break Firefox's offline
+ * support, so the shared notification code is written as classic scripts and loaded with importScripts. */
+importScripts('js/notify/core.js', 'js/notify/idb.js', 'js/notify/runner.js');
 const VERSION = 'sg-0.3.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
 const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
@@ -10,7 +13,8 @@ const SHELL = [
   './css/app.css',
   './js/app.js', './js/config.js', './js/ids.js', './js/data.js', './js/search.js', './js/filters.js', './js/profiles.js', './js/store.js', './js/sql.js', './js/export.js',
   './js/ui/dom.js', './js/ui/toast.js', './js/ui/list.js', './js/ui/detail.js', './js/ui/filters-panel.js', './js/ui/stats.js',
-  './js/ui/profiles-dialog.js', './js/ui/sql-console.js', './js/ui/about.js',
+  './js/ui/profiles-dialog.js', './js/ui/sql-console.js', './js/ui/about.js', './js/ui/notify-view.js',
+  './js/notify/core.js', './js/notify/idb.js', './js/notify/runner.js', './js/notify/page.js',
   './vendor/minisearch/minisearch.js',
   './vendor/sqljs/sql-wasm.js', './vendor/sqljs/sql-wasm.wasm',
   './icons/icon.svg', './icons/favicon.ico', './icons/favicon-32.png', './icons/apple-touch-icon.png',
@@ -122,7 +126,7 @@ self.addEventListener('fetch', e => {
   if (rel.startsWith('data/')) {
     if (rel === 'data/meta.json') {
       e.respondWith(networkFirst(req, DATA_CACHE));
-    } else if (/^data\/(catalog|search-index|agencies)\.json$/.test(rel)) {
+    } else if (/^data\/(catalog|search-index|agencies|changes)\.json$/.test(rel)) {
       // The app asks with cache: 'no-store' after a data_version change: then it must get the network copy.
       e.respondWith(req.cache === 'no-store' || req.cache === 'reload' ? networkFirst(req, DATA_CACHE) : staleWhileRevalidate(e, req, DATA_CACHE));
     } else if (rel.startsWith('data/records/') || rel === 'data/solicitations.sqlite') {
@@ -141,4 +145,42 @@ self.addEventListener('fetch', e => {
       .then(c => c.match(req, { ignoreSearch: req.mode === 'navigate' }))
       .then(hit => hit || networkFirst(req, SHELL_CACHE).catch(() => req.mode === 'navigate' ? caches.match('./index.html') : Response.error())));
   }
+});
+
+// ---------- daily notification report (best effort: only while the browser runs) ----------
+// Periodic Background Sync (installed Chromium apps, with permission) wakes the worker about twice a day; the page
+// runs the same check on load and when it becomes visible. js/notify/runner.js does the work; a lock in IndexedDB
+// keeps the page and the worker from sending the same report twice.
+const REPORT_TAG = 'sg-daily-report';
+
+function backgroundReport(mode) {
+  const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  return SgNotifyRunner.run({
+    kv: SgIdb, base: self.registration.scope, owner: 'sw', mode,
+    fetch: (url, init) => fetch(url, init),
+    notify: granted ? (title, options) => self.registration.showNotification(title, options) : undefined
+  }).catch(err => { console.warn('[sg] notification report failed', err); return { reason: 'error', error: String(err) }; });
+}
+
+self.addEventListener('periodicsync', e => {
+  if (e.tag === REPORT_TAG) e.waitUntil(backgroundReport('scheduled'));
+});
+
+// A click on the report notification opens the app (or focuses it) at the last report.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const fallback = new URL('./#/notify?report=last', self.registration.scope).href;
+  const want = e.notification.data && typeof e.notification.data.url === 'string' ? e.notification.data.url : fallback;
+  const url = new URL(want, self.registration.scope).origin === self.location.origin ? want : fallback;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
+    const scope = self.registration.scope;
+    const win = list.find(c => c.url.startsWith(scope));
+    if (win) {
+      await win.focus();
+      if (win.navigate) { try { await win.navigate(url); return; } catch (err) { /* not controlled: tell the page */ } }
+      win.postMessage({ type: 'OPEN', url });
+      return;
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(url);
+  }));
 });

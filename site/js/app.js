@@ -1,7 +1,7 @@
 /*
  * SAM's Garage — boot, routing and glue.
  *
- * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/about
+ * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/notify notifications · #/about
  * Filters live in the hash query (#/?q=uas&agency=DOD) so every view is shareable (filters.js).
  *
  * Start-up order, so first paint never waits on anything heavy:
@@ -27,6 +27,7 @@ import { renderDetail, renderMissing } from './ui/detail.js';
 import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
+import * as notify from './notify/page.js';
 
 const APP_VERSION = '0.3.0'; // app version; bump via scripts/release.js
 const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
@@ -62,7 +63,7 @@ const app = {
 const el = {
   main: $('#main'), q: $('#q'), list: $('#list'), detail: $('#detail'), count: $('#resultCount'), chips: $('#activeChips'),
   sort: $('#sortSel'), filtersBody: $('#filtersBody'), filtersBtn: $('#filtersBtn'), filtersBadge: $('#filtersBadge'),
-  freshness: $('#freshness'), sqlView: $('#sqlView'), aboutView: $('#aboutView'), listTitle: $('#listTitle'),
+  freshness: $('#freshness'), sqlView: $('#sqlView'), aboutView: $('#aboutView'), notifyView: $('#notifyView'), listTitle: $('#listTitle'),
   indexState: $('#indexState'), watchBadge: $('#watchBadge'), scrim: $('#scrim'), themeBtn: $('#themeBtn'),
   installBtn: $('#installBtn'), exportBtn: $('#exportBtn'), exportMenu: $('#exportMenu')
 };
@@ -217,6 +218,7 @@ function parseRoute(path) {
   if (path === '/watch') return { name: 'list', id: null, mode: 'watch' };
   if (path === '/sql') return { name: 'sql' };
   if (path === '/about') return { name: 'about' };
+  if (path === '/notify') return { name: 'notify' };
   const m = path.match(/^\/s\/(.+)$/);
   if (m) { try { return { name: 'detail', id: decodeURIComponent(m[1]) }; } catch { return { name: 'detail', id: m[1] }; } }
   return null;
@@ -237,12 +239,13 @@ async function onHashChange() {
   if (el.q.value.trim() !== app.state.q && document.activeElement !== el.q) el.q.value = app.state.q;
 
   // view switching
-  const view = route.name === 'sql' ? 'sql' : route.name === 'about' ? 'about' : 'list';
+  const view = route.name === 'sql' || route.name === 'about' || route.name === 'notify' ? route.name : 'list';
   el.main.dataset.view = view;
   el.sqlView.classList.toggle('hidden', view !== 'sql');
   el.aboutView.classList.toggle('hidden', view !== 'about');
+  el.notifyView.classList.toggle('hidden', view !== 'notify');
   el.main.dataset.detail = route.name === 'detail' ? 'open' : 'closed';
-  for (const [a, on] of [['#navWatch', route.mode === 'watch' || (route.name === 'detail' && app.listMode === 'watch')], ['#navSql', view === 'sql'], ['#navAbout', view === 'about']]) {
+  for (const [a, on] of [['#navWatch', route.mode === 'watch' || (route.name === 'detail' && app.listMode === 'watch')], ['#navSql', view === 'sql'], ['#navNotify', view === 'notify'], ['#navAbout', view === 'about']]) {
     const link = $(a);
     if (on) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   }
@@ -260,9 +263,14 @@ async function onHashChange() {
     renderAboutView();
     return;
   }
+  if (view === 'notify') {
+    document.title = "Notifications · SAM's Garage";
+    renderNotifyView(new URLSearchParams(query).get('report') === 'last');
+    return;
+  }
 
   // list (+ detail)
-  const listChanged = !app.rendered || stateChanged || prevMode !== app.listMode || prevRoute.name === 'sql' || prevRoute.name === 'about';
+  const listChanged = !app.rendered || stateChanged || prevMode !== app.listMode || ['sql', 'about', 'notify'].includes(prevRoute.name);
   if (listChanged) refresh();
   if (route.name === 'detail') {
     list.select(route.id);
@@ -331,6 +339,19 @@ function renderAboutView() {
   }));
 }
 
+function renderNotifyView(reportLast) {
+  import('./ui/notify-view.js').then(({ showNotifyView }) => showNotifyView(el.notifyView, {
+    catalog: app.catalog,
+    descriptions: app.descriptions,
+    profiles: app.profiles,
+    watchCount: app.loaded ? app.catalog.reduce((k, r) => k + (store.isWatched(r.id) ? 1 : 0), 0) : store.watchlist().size,
+    reportLast,
+    toast
+  })).catch(err => {
+    el.notifyView.replaceChildren(h('div', { class: 'about' }, h('p', { text: 'The notifications view could not load: ' + err.message })));
+  });
+}
+
 // ---------- data loading ----------
 
 function setCatalog(catalog) {
@@ -388,6 +409,7 @@ async function loadAll() {
   renderFreshness(el.freshness, meta, app.offline);
   app.lastMetaCheck = Date.now();
   if (meta) await checkVersion(meta);
+  notify.check(); // the daily report, when it is due and this browser sends it (the desktop app sends on its own)
 }
 
 /** The published data is newer than this version reads: no list, a notice and a way to update. */
@@ -648,7 +670,7 @@ function setupUi() {
   // last visit: stored when the app is hidden or closed, never on load
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') store.markVisit();
-    else recheckMeta();
+    else { recheckMeta(); notify.check(); }
   });
   window.addEventListener('pagehide', () => store.markVisit());
 
@@ -686,12 +708,21 @@ function setupPwa() {
   sw.register('sw.js').then(reg => {
     // a worker waiting from an older tab: let it take over (it calls skipWaiting itself, this is belt and braces)
     if (reg.waiting && hadController) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    // the daily report's Periodic Background Sync follows the saved settings
+    notify.load().then(r => notify.syncPeriodic(r.settings)).catch(() => {});
   }).catch(err => console.warn('Service worker not registered', err));
+  // a click on the report notification, when the open page is not controlled by the worker
+  sw.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.type === 'OPEN' && typeof d.url === 'string' && new URL(d.url, location.href).origin === location.origin) location.href = d.url;
+  });
 }
 
 // ---------- boot ----------
 
 setupUi();
 setupPwa();
+notify.startMirroring(); // the watchlist and profiles, where the background report reads them
+notify.onDesktopNavigate(hash => { if (/^#\/[a-z]/.test(hash)) location.hash = hash; });
 el.q.value = parseQuery(splitHash(location.hash).query).q;
 loadAll();

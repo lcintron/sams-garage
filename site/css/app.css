@@ -163,9 +163,10 @@ html[data-titlebar] :is(#filters, #detail, .scrim) { top: calc(var(--topbar-h) +
 .view { grid-column: 2 / -1; grid-row: 1; overflow: auto; min-height: 0; min-width: 0; }
 #main[data-view="sql"] > #results, #main[data-view="sql"] > #detail,
 #main[data-view="about"] > #results, #main[data-view="about"] > #detail { display: none; }
-#main[data-view="sql"] > #filters, #main[data-view="about"] > #filters { display: none; }
-#main[data-view="sql"], #main[data-view="about"] { grid-template-columns: 1fr; }
-#main[data-view="sql"] .view, #main[data-view="about"] .view { grid-column: 1 / -1; }
+#main[data-view="notify"] > #results, #main[data-view="notify"] > #detail { display: none; }
+#main[data-view="sql"] > #filters, #main[data-view="about"] > #filters, #main[data-view="notify"] > #filters { display: none; }
+#main[data-view="sql"], #main[data-view="about"], #main[data-view="notify"] { grid-template-columns: 1fr; }
+#main[data-view="sql"] .view, #main[data-view="about"] .view, #main[data-view="notify"] .view { grid-column: 1 / -1; }
 
 /* ---------- filters panel ---------- */
 .filters-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 8px var(--gutter); border-bottom: 1px solid var(--border); }
@@ -349,6 +350,56 @@ html[data-titlebar] :is(#filters, #detail, .scrim) { top: calc(var(--topbar-h) +
 .about .ok { color: var(--st-open); }
 .about .bad { color: var(--danger); }
 .table-wrap { overflow-x: auto; }
+
+/* ---------- notifications (#/notify) ---------- */
+.notify { padding: 16px var(--gutter) 48px; max-width: 860px; margin: 0 auto; }
+.notify h1 { font-size: 20px; margin-bottom: 6px; }
+.notify p, .notify li { line-height: 1.55; }
+.nf-sec { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 14px; }
+.nf-sec h2 { font-size: 15px; margin-bottom: 8px; }
+.nf-sec h2.inline { display: inline; }
+.nf-sec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); margin: 14px 0 6px; }
+.nf-sec summary { cursor: pointer; }
+.nf-checks { display: flex; flex-direction: column; gap: 2px; }
+.nf-toggle .lbl { white-space: normal; }
+.nf-time { display: inline-flex; align-items: center; gap: 6px; }
+.nf-time input { height: 30px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 8px; }
+.nf-chips { margin: 6px 0; }
+.nf-chip::after { content: "×"; color: var(--text-dim); font-size: 14px; line-height: 1; margin-left: 4px; }
+.nf-add input { flex: 1 1 220px; min-width: 0; height: 30px; }
+.nf-profiles { max-height: none; }
+.nf-profiles .lbl { white-space: normal; overflow: visible; }
+.nf-chans { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.nf-chan { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; background: var(--bg-2); }
+.nf-chan.off { opacity: .7; }
+.nf-chan p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.nf-chan .grow { flex: 1; }
+.nf-name { font-weight: 700; overflow-wrap: anywhere; }
+.nf-on { padding: 0; }
+.nf-only { border-color: var(--warn); color: var(--warn); }
+.nf-bad { border-color: var(--danger); color: var(--danger); }
+.nf-form { display: grid; gap: 8px; }
+.nf-form label { display: grid; gap: 3px; font-size: 12px; color: var(--text-dim); }
+.nf-field { flex-wrap: nowrap; }
+.nf-field input { flex: 1; min-width: 0; height: 30px; font-family: var(--mono); font-size: 12px; }
+.nf-errors p { color: var(--danger); margin: 2px 0; }
+.nf-addchan { margin-top: 4px; }
+.warn-text { color: var(--warn); }
+.nf-report { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-top: 10px; background: var(--bg-2); }
+.nf-headline { font-weight: 700; margin: 0 0 4px; }
+.nf-rsec h3 { margin-top: 10px; }
+.nf-rsec ul { margin: 0; padding-left: 18px; }
+.nf-rsec li { margin: 4px 0; overflow-wrap: anywhere; }
+.nf-payloads { margin-top: 10px; }
+.nf-pre { width: 100%; max-height: 320px; overflow: auto; background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.nf-where { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; margin: 0; }
+.nf-where dt { font-weight: 600; }
+.nf-where dd { margin: 0; }
+.nf-warn { margin: 8px 0; }
+@media (max-width: 700px) {
+  .nf-where { grid-template-columns: 1fr; gap: 2px; }
+  .nf-where dd { margin-bottom: 8px; }
+}
 
 /* ---------- dialog (profiles) ---------- */
 dialog {
