@@ -97,6 +97,16 @@ test('store: a secret that fails to decrypt once is kept and comes back when the
   assert.ok(disk.settings.channels[0].url.$enc, 'the encrypted blob is still on disk');
   assert.equal(disk.settings.time, '09:30');
   fail = false;
+  const notes = [];
+  fail = true;
+  const s3 = createStore({ file, N, cipher: flaky, onNote: m => notes.push(m) });
+  s3.getSettings();
+  s3.setState({ channels: {} }); // each write makes the next access read the file again
+  s3.getSettings();
+  s3.setWatchlist(['y']);
+  s3.getSettings();
+  assert.equal(notes.length, 1, 'the same undecryptable secrets are noted once, not on every read');
+  fail = false;
   const s2 = createStore({ file, N, cipher: flaky });
   assert.equal(s2.getSettings().channels[0].url, DISCORD, 'the secret survived');
   assert.equal(s2.getSettings().channels[1].apikey, '987654');

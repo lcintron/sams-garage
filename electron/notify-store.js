@@ -34,7 +34,8 @@ const VERSION = 1;
 function createStore(o) {
   const { file, N, cipher = null, onNote = () => {} } = o;
   const canEncrypt = () => { try { return !!(cipher && cipher.available()); } catch (e) { return false; } };
-  let cache = null;   // { mtime, settings, state, watchlist, profiles, kept, lost }
+  let cache = null;   // { mtime, settings, state, watchlist, profiles, kept }
+  let keptNoted = '';  // what the last "could not be decrypted" note was about (it is logged once, not per read)
 
   const secretKeys = ch => N.fieldsOf(ch).filter(f => f.secret).map(f => f.key);
   const mtime = () => { try { return fs.statSync(file).mtimeMs; } catch (e) { return null; } };
@@ -65,7 +66,9 @@ function createStore(o) {
       }
       return out;
     }) : [];
-    if (kept.size) onNote('some notification secrets could not be decrypted now; they are kept and will be read again later');
+    const sig = JSON.stringify([...kept].map(([id, f]) => [id, Object.keys(f).sort()]).sort());
+    if (kept.size && sig !== keptNoted) onNote('some notification secrets could not be decrypted now; they are kept and will be read again later');
+    keptNoted = kept.size ? sig : '';
     return { settings: N.normalizeSettings({ ...raw, channels }), kept };
   }
 
