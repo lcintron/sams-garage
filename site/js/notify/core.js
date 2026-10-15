@@ -246,8 +246,9 @@
   /**
    * Check a channel's fields. Returns { ok, errors: [{field, message}], warnings: [string] }. Webhook URLs must be
    * https (http only on this machine, for local testing); a host that does not look like the platform's is a warning.
+   * opts.secrets === false checks only the fields that are not secret (a browser's Teams and Cloud API channels).
    */
-  function validateChannel(c) {
+  function validateChannel(c, opts) {
     const ch = normalizeChannel(c);
     const errors = [], warnings = [];
     if (!ch) return { ok: false, errors: [{ field: 'type', message: 'Unknown channel type.' }], warnings };
@@ -277,7 +278,71 @@
       need('template', /^[a-z0-9_]{1,512}$/.test(ch.template), 'The approved template name (lowercase, digits, underscores).');
       need('language', /^[a-z]{2,3}(_[A-Z]{2})?$/.test(ch.language), 'The template language code, e.g. en_US.');
     }
+    if (opts && opts.secrets === false) { // a browser checks only what it keeps (see keepsSecrets)
+      const secret = new Set(fieldsOf(ch).filter(f => f.secret).map(f => f.key));
+      const rest = errors.filter(e => !secret.has(e.field));
+      return { ok: !rest.length, errors: rest, warnings: [] };
+    }
     return { ok: !errors.length, errors, warnings };
+  }
+
+  /**
+   * Whether a runtime keeps a channel's secrets. The desktop app does (encrypted). A browser keeps only the secrets
+   * of channels it can send to: Teams and WhatsApp Cloud API channels are set up there for GitHub Actions only, and
+   * their webhook or token is entered when exporting, never stored in browser storage.
+   */
+  const keepsSecrets = (runtime, ch) => runtime !== 'browser' || browserMode(ch) !== 'unsupported';
+
+  /** Settings as a browser stores them: the secret fields of the channels it cannot send to emptied. */
+  function browserStorable(settings) {
+    const s = normalizeSettings(settings);
+    return { ...s, channels: s.channels.map(ch => {
+      if (keepsSecrets('browser', ch)) return ch;
+      const out = { ...ch };
+      for (const f of fieldsOf(ch)) if (f.secret) out[f.key] = '';
+      return out;
+    }) };
+  }
+
+  /** "Other sites can read this origin's storage": GitHub Pages user sites share one origin per account. */
+  const sharedOrigin = hostname => /\.github\.io$/i.test(String(hostname || ''));
+
+  /**
+   * The JSON for the SG_NOTIFY_CONFIG repository secret, and what is still missing.
+   * secrets: {channelId: {field: value}} typed at export time (the secrets a browser does not keep); they go into the
+   * export only, never back into the settings. missing: enabled channels that would not validate, with their fields.
+   */
+  function buildExport(o) {
+    const s = normalizeSettings(o && o.settings);
+    const extra = isObj(o && o.secrets) ? o.secrets : {};
+    const channels = s.channels.map(ch => {
+      const add = isObj(extra[ch.id]) ? extra[ch.id] : {};
+      const out = { ...ch };
+      for (const f of fieldsOf(ch)) if (f.secret && typeof add[f.key] === 'string' && add[f.key].trim()) out[f.key] = add[f.key].trim();
+      return out;
+    });
+    const missing = channels.filter(ch => ch.enabled).map(ch => ({ id: ch.id, name: ch.name, errors: validateChannel(ch).errors }))
+      .filter(m => m.errors.length).map(m => ({ id: m.id, name: m.name, fields: [...new Set(m.errors.map(e => e.field))] }));
+    const doc = {
+      version: 1, settings: { ...s, channels },
+      watchlist: [...new Set((o && Array.isArray(o.watchlist) ? o.watchlist : []).filter(x => typeof x === 'string'))].sort(),
+      profiles: (o && Array.isArray(o.profiles) ? o.profiles : []).map(normalizeProfile).filter(Boolean)
+    };
+    return { text: JSON.stringify(doc), missing };
+  }
+
+  /** Whether the browser should keep a Periodic Background Sync: on, sending from this browser, a channel it can reach. */
+  function wantsPeriodicSync(settings) {
+    const s = normalizeSettings(settings);
+    return s.enabled && s.background.browser && s.channels.some(c => c.enabled && browserMode(c) !== 'unsupported');
+  }
+
+  /** The run state without the entries of channels that no longer exist (the device's own notification stays). */
+  function pruneState(state, settings) {
+    const st = cloneState(state);
+    const ids = new Set(normalizeSettings(settings).channels.map(c => c.id));
+    for (const id of Object.keys(st.channels)) if (id !== LOCAL_ID && !ids.has(id)) delete st.channels[id];
+    return st;
   }
 
   /** Every secret value in some settings (with their URL-encoded forms), for masking. Longest first. */
@@ -874,7 +939,7 @@
     const settings = normalizeSettings(o.settings);
     const mode = o.mode === 'now' ? 'now' : 'scheduled';
     const tz = o.tzOffset;
-    const state = cloneState(o.state);
+    const state = pruneState(o.state, settings); // removed channels leave no state behind
     state.lastCheck = iso(now);
     // errors can quote a request (a webhook URL, a key): every one is redacted before it is stored or returned
     const secrets = secretValues(settings);
@@ -950,7 +1015,7 @@
     normalizeText, cleanTerm, termRegex, findTerms, recordText,
     PRESET_PROFILES, parseTerms, normalizeProfile, allProfiles,
     kindOf, kindLabel, browserMode, fieldsOf, defaultSettings, normalizeSettings, normalizeChannel, validateChannel,
-    secretValues, redact, redactRequest,
+    secretValues, redact, redactRequest, keepsSecrets, browserStorable, sharedOrigin, buildExport, wantsPeriodicSync, pruneState,
     triggerTerms, matchRecord, buildDigest, sampleDigest,
     topicLink, fmtDate, countPhrase, format, buildRequest, interpretResponse,
     localDate, prevDate, slotDate, isDue, channelDue, cloneState, runDue

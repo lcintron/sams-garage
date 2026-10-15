@@ -396,6 +396,21 @@ test('validateChannel: https webhooks, retired O365 connectors refused, WhatsApp
   assert.deepEqual(N.validateChannel({ ...CH.cloud, template: 'Bad Name', language: 'english' }).errors.map(e => e.field), ['template', 'language']);
 });
 
+test('a browser checks only the fields it keeps; runDue drops the state of removed channels', async () => {
+  const teams = { id: 't', type: 'teams', name: 'Bids', url: '' };
+  assert.equal(N.validateChannel(teams).ok, false);
+  assert.equal(N.validateChannel(teams, { secrets: false }).ok, true);
+  assert.deepEqual(N.validateChannel({ ...CH.cloud, accessToken: '', template: 'Bad Name' }, { secrets: false }).errors.map(e => e.field), ['template']);
+  assert.equal(N.keepsSecrets('browser', CH.teams), false);
+  assert.equal(N.keepsSecrets('desktop', CH.teams), true);
+  assert.equal(N.keepsSecrets('browser', CH.discord), true);
+  const pruned = N.pruneState({ channels: { d: { date: 'x' }, gone: { date: 'y' }, __local: { date: 'z' } } }, { channels: [CH.discord] });
+  assert.deepEqual(Object.keys(pruned.channels).sort(), ['__local', 'd']);
+  const h = harness();
+  const r = await h.run({ channels: { removed: { date: '2026-10-01' } } }, at('2026-10-09', '08:05', -240));
+  assert.ok(!('removed' in r.state.channels));
+});
+
 test('secrets: every secret value is found and redacted from requests', () => {
   const s = { channels: Object.values(CH) };
   const secrets = N.secretValues(s);
@@ -621,7 +636,12 @@ test('scripts/site-url.sh points the report links at the deployed address too', 
     fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
     fs.copyFileSync(path.join(here, '..', f), path.join(dir, f));
   }
-  const r = spawnSync('bash', [path.join(here, '..', '..', 'scripts', 'site-url.sh'), dir, 'https://sg.example.org/'], { encoding: 'utf8' });
+  // relative, forward-slash paths from the repository root: Git Bash, Linux and WSL's bash (which cannot read C:\ paths)
+  // all resolve them
+  const root = path.join(here, '..', '..');
+  const rel = p => path.relative(root, p).split(path.sep).join('/');
+  const r = spawnSync('bash', ['scripts/site-url.sh', rel(dir), 'https://sg.example.org/'], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0 && /python[^\n]*(not found|No such file)/i.test(r.stderr)) return t.skip('this bash has no python');
   assert.equal(r.status, 0, r.stderr);
   const core = fs.readFileSync(path.join(dir, 'js/notify/core.js'), 'utf8');
   assert.match(core, /const PUBLIC_URL = 'https:\/\/sg\.example\.org\/';/);

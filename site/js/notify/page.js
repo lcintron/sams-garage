@@ -6,7 +6,9 @@
  *     a lock in IndexedDB keeps the two from sending twice).
  *   - Desktop app: everything goes through the preload bridge (window.sgDesktop.notify); the main process stores the
  *     settings (secrets encrypted) and sends on its own schedule (electron/notify.js). No service worker there.
- * Secrets stay on this device: they are never put in the app's URLs or logged.
+ * Secrets stay on this device: they are never put in the app's URLs or logged. A browser keeps only the secrets of the
+ * channels it can send to (Slack, Discord, CallMeBot): Teams and WhatsApp Cloud API channels are set up here for
+ * GitHub Actions, and their webhook or token is typed at export time and never stored (core.js browserStorable).
  */
 import './core.js';
 import './idb.js';
@@ -36,17 +38,43 @@ export async function load() {
     const r = await DESKTOP.notify.getSettings();
     return { settings: N.normalizeSettings(r && r.settings), state: N.cloneState(r && r.state), lastReport: (r && r.state && r.state.lastReport) || null, encryption: r ? r.encryption : null };
   }
-  const [settings, state, lastReport] = await Promise.all([kv.get(R.KEYS.settings), kv.get(R.KEYS.state), kv.get(R.KEYS.lastReport)]);
-  return { settings: N.normalizeSettings(settings), state: N.cloneState(state), lastReport: lastReport || null };
+  const [stored, state, lastReport] = await Promise.all([kv.get(R.KEYS.settings), kv.get(R.KEYS.state), kv.get(R.KEYS.lastReport)]);
+  const settings = N.browserStorable(stored);
+  // settings from before that rule may still hold such a secret: drop it from storage now
+  if (stored && JSON.stringify(settings) !== JSON.stringify(N.normalizeSettings(stored))) await kv.set(R.KEYS.settings, settings);
+  return { settings, state: N.cloneState(state), lastReport: lastReport || null };
 }
 
 /** Store the settings (normalized) and bring the background schedule in line with them. */
 export async function save(settings) {
-  const s = N.normalizeSettings(settings);
-  if (DESKTOP) await DESKTOP.notify.saveSettings(s);
-  else await kv.set(R.KEYS.settings, s);
+  let s = N.normalizeSettings(settings);
+  if (DESKTOP) s = N.normalizeSettings(await DESKTOP.notify.saveSettings(s));
+  else {
+    s = N.browserStorable(s);
+    await kv.set(R.KEYS.settings, s);
+    await kv.update(R.KEYS.state, st => N.pruneState(st, s)); // a removed channel leaves no run state behind
+  }
   syncPeriodic(s).catch(() => {});
   return s;
+}
+
+/** The channels whose secrets this runtime does not keep (a browser's Teams and Cloud API channels). */
+export const secretsKept = channel => N.keepsSecrets(DESKTOP ? 'desktop' : 'browser', channel);
+
+/**
+ * "Clear local data": the notification settings (channels and their secrets), the run state, the last report and the
+ * copies of the watchlist and profiles; the browser also drops its lock and the Periodic Background Sync.
+ */
+export async function reset() {
+  if (DESKTOP) return DESKTOP.notify.reset();
+  await Promise.all([R.KEYS.settings, R.KEYS.state, R.KEYS.lastReport, R.KEYS.watchlist, R.KEYS.profiles, 'lock:' + R.LOCK].map(k => kv.del(k).catch(() => {})));
+  const reg = await swRegistration();
+  if (reg && 'periodicSync' in reg) await reg.periodicSync.unregister(TAG).catch(() => {});
+}
+
+/** The desktop app's main process changed the settings (tray: Pause/Resume, Keep running in the tray). */
+export function onSettingsChanged(fn) {
+  if (DESKTOP && DESKTOP.notify.onChanged) DESKTOP.notify.onChanged(fn);
 }
 
 /** Copy the watchlist and the user's profiles to where the background sender reads them. */
@@ -145,7 +173,7 @@ export async function status() {
 export async function syncPeriodic(settings) {
   const reg = await swRegistration();
   if (!reg || !('periodicSync' in reg)) return false;
-  const want = settings.enabled && settings.background.browser && settings.channels.some(c => c.enabled && N.browserMode(c) !== 'unsupported');
+  const want = N.wantsPeriodicSync(settings);
   try {
     if (want) await reg.periodicSync.register(TAG, { minInterval: PERIODIC_MS });
     else await reg.periodicSync.unregister(TAG);
@@ -158,10 +186,14 @@ export async function requestNotifications() {
   try { return await Notification.requestPermission(); } catch { return Notification.permission; }
 }
 
-/** The JSON for the SG_NOTIFY_CONFIG repository secret: settings, watchlist and custom profiles, secrets included. */
-export async function exportConfig() {
+/**
+ * The JSON for the SG_NOTIFY_CONFIG repository secret: settings, watchlist and custom profiles, secrets included.
+ * secrets: {channelId: {field: value}} typed in the export form (the ones a browser does not keep); used for this
+ * export only. Resolves {text, missing} (core.js buildExport): missing lists enabled channels still incomplete.
+ */
+export async function exportConfig(secrets = {}) {
   const { settings } = await load();
-  return JSON.stringify({ version: 1, settings, watchlist: [...store.watchlist()].sort(), profiles: store.userProfiles() });
+  return N.buildExport({ settings, secrets, watchlist: [...store.watchlist()], profiles: store.userProfiles() });
 }
 
 /** The desktop app asks the page to open a view (a click on the report notification). */

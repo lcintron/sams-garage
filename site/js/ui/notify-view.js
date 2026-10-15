@@ -1,7 +1,10 @@
 /*
  * Notifications view (#/notify): the daily report's channels, triggers and time, a preview, the background status
- * (what runs where) and the export for GitHub Actions. Loaded on demand by app.js. Settings are saved as they change;
- * a channel's fields are saved with its form. Secrets are shown only in their own fields (password inputs).
+ * (what runs where) and the export for GitHub Actions. Loaded on demand by app.js. Settings are saved as they change
+ * (a short debounce, flushed when the page is hidden); each save reloads the stored settings and re-applies this
+ * view's changes, so a change made elsewhere (the desktop tray's Pause) is never overwritten with a stale value. A
+ * channel's fields are saved with its form. Secrets are shown only in their own fields (password inputs). In a browser,
+ * Teams and WhatsApp Cloud API channels keep no secret: those are typed in the export form and used only there.
  */
 import { h, fmtDate } from './dom.js';
 import * as page from '../notify/page.js';
@@ -34,10 +37,12 @@ const HELP = {
   'whatsapp:cloud': ['Meta\'s WhatsApp Cloud API: a WhatsApp Business app, its phone number ID, an access token, and an approved message template whose body has exactly one variable, {{1}}. Desktop app or GitHub Actions only.']
 };
 
-let ui = null; // {view, o, settings, state, lastReport, encryption, editing, draft, preview, status, saving}
+let ui = null; // {view, o, settings, state, lastReport, encryption, editing, draft, preview, status, exportSecrets}
 
 const kindOf = c => N.kindOf(c);
 const unsupportedHere = c => !page.isDesktop() && N.browserMode(c) === 'unsupported';
+const validate = c => N.validateChannel(c, page.secretsKept(c) ? undefined : { secrets: false });
+const sharedOriginHere = () => !page.isDesktop() && N.sharedOrigin(location.hostname);
 const when = iso => { const t = Date.parse(iso || ''); return Number.isNaN(t) ? '' : new Date(t).toLocaleString(); };
 const helpNodes = parts => parts.map(p => (Array.isArray(p) ? h('a', { href: p[1], target: '_blank', rel: 'noopener noreferrer', text: p[0] }) : p));
 
@@ -74,17 +79,55 @@ export async function showNotifyView(view, o) {
 // ---------- saving ----------
 
 let saveTimer = null;
+let pending = []; // this view's changes since the last save, as functions of the settings
+let saving = Promise.resolve();
+const replay = (fns, s) => fns.reduce((acc, fn) => N.normalizeSettings(fn(structuredClone(acc))), s);
+
 function change(patch) {
-  ui.settings = N.normalizeSettings(typeof patch === 'function' ? patch(structuredClone(ui.settings)) : { ...ui.settings, ...patch });
+  const fn = typeof patch === 'function' ? patch : s => ({ ...s, ...patch });
+  pending.push(fn);
+  ui.settings = replay([fn], ui.settings);
   ui.preview = undefined;
   render();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try { ui.settings = await page.save(ui.settings); ui.o.toast('Notification settings saved', { id: 'nfsave', timeout: 1500 }); }
-    catch (e) { ui.o.toast('Could not save: ' + e.message, { id: 'nfsave' }); }
-    page.status().then(s => { ui.status = s; renderStatus(); }).catch(() => {});
-  }, 400);
+  saveTimer = setTimeout(() => { flushSave(); }, 400);
 }
+
+/** Save now: reload what is stored, re-apply this view's pending changes, store the result. */
+function flushSave() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (!pending.length) return saving;
+  const fns = pending;
+  pending = [];
+  saving = saving.then(async () => {
+    try {
+      const saved = await page.save(replay(fns, (await page.load()).settings));
+      if (ui) {
+        ui.settings = replay(pending, saved); // edits made meanwhile stay on top
+        ui.o.toast('Notification settings saved', { id: 'nfsave', timeout: 1500 });
+      }
+    } catch (e) {
+      if (ui) ui.o.toast('Could not save: ' + e.message, { id: 'nfsave' });
+    }
+    page.status().then(st => { if (ui) { ui.status = st; renderStatus(); } }).catch(() => {});
+  });
+  return saving;
+}
+
+// a page that is hidden or closed saves what is pending at once
+addEventListener('pagehide', () => { flushSave(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+// the desktop app's tray changed the settings: show them (this view's pending edits are re-applied on top)
+page.onSettingsChanged(async () => {
+  if (!ui || !ui.settings || ui.editing) return;
+  try {
+    const r = await page.load();
+    ui.settings = replay(pending, r.settings);
+    ui.state = r.state;
+    render();
+  } catch { /* keep what is shown */ }
+});
 const trig = patch => change(s => ({ ...s, triggers: { ...s.triggers, ...patch } }));
 const bg = patch => change(s => ({ ...s, background: { ...s.background, ...patch } }));
 
@@ -198,7 +241,7 @@ function channelsSection(s) {
 }
 
 function channelCard(c, cs) {
-  const v = N.validateChannel(c);
+  const v = validate(c);
   const statusText = cs.error && cs.failDate ? `Failed ${cs.failDate}: ${cs.error}` : cs.at ? `Last report ${when(cs.at)}${cs.opaque ? ' (sent; a browser cannot read the answer)' : ''}` : 'No report sent yet.';
   return h('div', { class: 'nf-chan' + (c.enabled ? '' : ' off') },
     h('div', { class: 'row' },
@@ -212,7 +255,7 @@ function channelCard(c, cs) {
       h('button', { class: 'btn small', type: 'button', text: 'Send test', disabled: !v.ok || unsupportedHere(c) || null, onclick: e => sendTest(c, e.target) }),
       h('button', { class: 'btn small ghost', type: 'button', text: 'Edit', onclick: () => { ui.editing = c.id; ui.draft = { ...c }; render(); } }),
       h('button', { class: 'btn small ghost danger', type: 'button', text: 'Remove', onclick: () => {
-        if (confirm(`Remove the channel "${c.name}"? Its webhook or key is deleted from this device.`)) change(st => ({ ...st, channels: st.channels.filter(x => x.id !== c.id) }));
+        if (confirm(`Remove the channel "${c.name}"? Its settings, webhook and key are deleted from this device.`)) change(st => ({ ...st, channels: st.channels.filter(x => x.id !== c.id) }));
       } })),
     h('p', { class: 'small ' + (cs.error && cs.failDate ? 'warn-text' : 'dim'), text: statusText }));
 }
@@ -222,21 +265,15 @@ function channelForm(c) {
   const isNew = ui.editing.startsWith('new:');
   const err = h('div', { class: 'small nf-errors', role: 'alert' });
   const inputs = {};
-  const fields = [{ key: 'name' }, ...N.fieldsOf(c)];
-  const rows = fields.map(f => {
-    const id = 'nf-f-' + f.key;
-    const type = f.secret && (f.key === 'url' || f.key === 'apikey' || f.key === 'accessToken') ? 'password' : f.key === 'phone' || f.key === 'to' ? 'tel' : 'text';
-    const input = h('input', { id, type, value: c[f.key] || '', autocomplete: 'off', spellcheck: 'false', placeholder: f.key === 'name' ? '' : (PLACEHOLDERS[kind] || {})[f.key] || '',
-      oninput: e => { c[f.key] = e.target.value; } }); // c is ui.draft: typed text survives a re-render
-    inputs[f.key] = input;
-    const show = type === 'password' ? h('button', { class: 'btn small ghost', type: 'button', text: 'Show', onclick: e => { input.type = input.type === 'password' ? 'text' : 'password'; e.target.textContent = input.type === 'password' ? 'Show' : 'Hide'; } }) : null;
-    return h('label', { for: id }, f.key === 'name' ? 'Name' : LABELS[f.key] || f.key, h('span', { class: 'row nf-field' }, input, show));
-  });
+  const kept = page.secretsKept(c);
+  const fields = [{ key: 'name' }, ...N.fieldsOf(c).filter(f => kept || !f.secret)];
+  // c is ui.draft: typed text survives a re-render
+  const rows = fields.map(f => secretInput('nf-f-' + f.key, f, kind, c[f.key] || '', v => { c[f.key] = v; }, inputs));
   const submit = e => {
     e.preventDefault();
     const next = { ...c };
     for (const [k, input] of Object.entries(inputs)) next[k] = input.value.trim();
-    const v = N.validateChannel(next);
+    const v = validate(next);
     if (!v.ok) {
       err.replaceChildren(...v.errors.map(x => h('p', { text: (LABELS[x.field] || x.field) + ': ' + x.message })));
       inputs[v.errors[0].field]?.focus();
@@ -253,7 +290,11 @@ function channelForm(c) {
       unsupportedHere(c) ? h('span', { class: 'tag nf-only', text: 'Desktop app or GitHub Actions only' }) : null),
     h('p', { class: 'small dim' }, helpNodes(HELP[kind] || [])),
     rows, err,
-    h('p', { class: 'small dim', text: page.isDesktop() ? 'Stored on this computer, encrypted with the system keychain when one is available.' : 'Stored only in this browser. Anyone with this webhook or key can post to the channel: keep it private.' }),
+    kept ? null : h('p', { class: 'small notice nf-warn nf-nokeep' }, 'This browser cannot send to ' + N.kindLabel(c) + ', so it does not keep its ',
+      kind === 'teams' ? 'webhook URL: you enter it' : 'access token and numbers: you enter them', ' under "Export for GitHub Actions", for the export only. To send from this computer, use the desktop app.'),
+    kept && sharedOriginHere() ? h('p', { class: 'small notice nf-warn nf-origin' }, h('strong', { text: 'Shared address: ' }),
+      'other sites under ' + location.hostname + ' can read what this site keeps in the browser. For webhooks and keys, prefer the desktop app or GitHub Actions, or wait for the app\'s own domain.') : null,
+    h('p', { class: 'small dim', text: page.isDesktop() ? 'Stored on this computer, encrypted with the system keychain when one is available.' : kept ? 'Stored only in this browser. Anyone with this webhook or key can post to the channel: keep it private.' : 'Only the name and the fields that are not secret are stored in this browser.' }),
     h('div', { class: 'row' },
       h('button', { class: 'btn small primary', type: 'submit', text: isNew ? 'Add channel' : 'Save channel' }),
       h('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: () => { ui.editing = null; ui.draft = null; render(); } })));
@@ -321,13 +362,34 @@ function backgroundSection(s) {
 }
 
 function exportSection() {
-  return h('section', { class: 'nf-sec' },
+  // the secrets this runtime does not keep (a browser's Teams and Cloud API channels) are typed here, for this export
+  const need = ui.settings.channels.filter(c => c.enabled && !page.secretsKept(c));
+  const typed = ui.exportSecrets || (ui.exportSecrets = {});
+  const inputs = {};
+  const rows = need.map(c => h('fieldset', { class: 'nf-chan nf-form' }, h('legend', { text: c.name + ' (' + N.kindLabel(c) + ')' }),
+    N.fieldsOf(c).filter(f => f.secret).map(f => secretInput('nf-x-' + c.id + '-' + f.key, f, N.kindOf(c), (typed[c.id] || {})[f.key] || '',
+      v => { (typed[c.id] = typed[c.id] || {})[f.key] = v; }, inputs, c.id))));
+  return h('section', { class: 'nf-sec', id: 'nfExport' },
     h('h2', { text: 'Export for GitHub Actions' }),
     h('p', null, 'Copies your settings, watchlist and custom profiles as JSON for the repository secret ', h('code', { text: 'SG_NOTIFY_CONFIG' }),
       ' (Settings → Secrets and variables → Actions → New repository secret). The daily workflow then sends the report after each data refresh.'),
     h('p', { class: 'notice nf-warn' }, h('strong', { text: 'It contains your secrets: ' }),
       'webhook URLs, API keys and tokens. Paste it only into the repository secret, never into an issue, a commit or a chat. Export again after you change the settings or the watchlist.'),
+    need.length ? h('p', { class: 'small dim', text: 'These channels keep no secret in this browser: enter them for this export. They are not saved.' }) : null,
+    rows,
+    h('div', { class: 'small nf-errors', id: 'nfExportErr', role: 'alert' }),
     h('button', { class: 'btn small', type: 'button', text: 'Copy settings for GitHub Actions', onclick: exportConfig }));
+}
+
+/** One input for a channel field: secrets as password fields that browsers and password managers do not offer to save. */
+function secretInput(id, f, kind, value, onInput, inputs, group) {
+  const type = f.secret && (f.key === 'url' || f.key === 'apikey' || f.key === 'accessToken') ? 'password' : f.key === 'phone' || f.key === 'to' ? 'tel' : 'text';
+  const input = h('input', { id, type, value, spellcheck: 'false', placeholder: f.key === 'name' ? '' : (PLACEHOLDERS[kind] || {})[f.key] || '',
+    autocomplete: type === 'password' ? 'new-password' : 'off', 'data-lpignore': 'true', 'data-1p-ignore': 'true',
+    oninput: e => onInput(e.target.value) });
+  inputs[group ? group + ':' + f.key : f.key] = input;
+  const show = type === 'password' ? h('button', { class: 'btn small ghost', type: 'button', text: 'Show', onclick: e => { input.type = input.type === 'password' ? 'text' : 'password'; e.target.textContent = input.type === 'password' ? 'Show' : 'Hide'; } }) : null;
+  return h('label', { for: id }, f.key === 'name' ? 'Name' : LABELS[f.key] || f.key, h('span', { class: 'row nf-field' }, input, show));
 }
 
 function toggle(id, on, label, onchange) {
@@ -348,8 +410,7 @@ async function sendTest(c, btn) {
 
 async function sendNow() {
   try {
-    clearTimeout(saveTimer);
-    await page.save(ui.settings);
+    await flushSave();
     const r = await page.sendNow();
     const msg = !r ? 'Nothing happened.' : r.sent ? `Report sent to ${r.sent} ${r.sent === 1 ? 'channel' : 'channels'}` + (r.failed ? `, ${r.failed} failed.` : '.')
       : r.failed ? 'The report could not be sent: ' + ((r.results || []).find(x => x.error) || {}).error
@@ -372,7 +433,15 @@ async function preview() {
 }
 
 async function exportConfig() {
-  const text = await page.exportConfig();
+  await flushSave();
+  const { text, missing } = await page.exportConfig(ui.exportSecrets || {});
+  const errBox = document.getElementById('nfExportErr');
+  if (missing.length) {
+    errBox.replaceChildren(...missing.map(m => h('p', { text: m.name + ': fill in ' + m.fields.map(k => LABELS[k] || k).join(', ') + '.' })));
+    return;
+  }
+  errBox.replaceChildren();
+  ui.exportSecrets = {}; // typed for this export only
   try {
     await navigator.clipboard.writeText(text);
     ui.o.toast('Copied. Paste it into the SG_NOTIFY_CONFIG repository secret.', { timeout: 6000 });
