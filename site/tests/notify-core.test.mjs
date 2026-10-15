@@ -641,7 +641,8 @@ test('scripts/site-url.sh points the report links at the deployed address too', 
   const root = path.join(here, '..', '..');
   const rel = p => path.relative(root, p).split(path.sep).join('/');
   const r = spawnSync('bash', ['scripts/site-url.sh', rel(dir), 'https://sg.example.org/'], { cwd: root, encoding: 'utf8' });
-  if (r.status !== 0 && /python[^\n]*(not found|No such file)/i.test(r.stderr)) return t.skip('this bash has no python');
+  // a local WSL bash may have no python; on CI the test must run, never skip
+  if (r.status !== 0 && !process.env.CI && /python[^\n]*(not found|No such file)/i.test(r.stderr)) return t.skip('this bash has no python');
   assert.equal(r.status, 0, r.stderr);
   const core = fs.readFileSync(path.join(dir, 'js/notify/core.js'), 'utf8');
   assert.match(core, /const PUBLIC_URL = 'https:\/\/sg\.example\.org\/';/);
