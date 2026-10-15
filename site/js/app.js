@@ -273,6 +273,8 @@ function followAlias(route = app.route) {
   }
 }
 
+const VIEW_FOCUS = new Set(['settings', 'about', 'notify']);
+
 async function onHashChange() {
   const { path, query } = splitHash(location.hash);
   const route = parseRoute(path);
@@ -296,6 +298,9 @@ async function onHashChange() {
   syncNav();
   // another page (Back, a link elsewhere): the drawer closes. A filter change or a saved search keeps it open.
   if (activeNav(prevRoute, prevMode) !== activeNav(route, app.listMode) || viewOf(prevRoute) !== view) closeDrawer();
+  // entering a view: its title takes the focus (after closeDrawer, which would move it back to the menu button);
+  // the SQL console focuses its query box itself
+  if (view !== viewOf(prevRoute) && VIEW_FOCUS.has(view)) $('#' + view + 'Title').focus({ preventScroll: true });
 
   if (view !== 'list') {
     document.title = viewTitle(view);
@@ -742,7 +747,15 @@ function setupUi() {
   el.q.addEventListener('keydown', e => {
     if (e.key === 'Enter') { clearTimeout(t); setState({ q: el.q.value.trim() }); }
     if (e.key === 'ArrowDown') { e.preventDefault(); clearTimeout(t); setState({ q: el.q.value.trim() }); list.focusFirst(); }
-    if (e.key === 'Escape' && el.q.value) { e.preventDefault(); e.stopPropagation(); el.q.value = ''; setState({ q: '' }); }
+    if (e.key === 'Escape' && el.q.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearTimeout(t);
+      el.q.value = '';
+      // on another view, clearing the box stays there (setState would open the list)
+      if (viewOf(app.route) === 'list') setState({ q: '' });
+      else { app.state = { ...app.state, q: '' }; syncNav(); }
+    }
   });
 
   // theme: the segmented Light / Dark / System in the panel and in Settings
@@ -810,7 +823,13 @@ function setupUi() {
   // global keys
   document.addEventListener('keydown', e => {
     const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
-    if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); el.q.focus(); el.q.select(); return; }
+    if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (panelOpen()) closeDrawer({ restoreFocus: false }); // the search box is behind the drawer
+      el.q.focus();
+      el.q.select();
+      return;
+    }
     if (e.key === 'Escape' && !e.defaultPrevented) {
       if (document.querySelector('dialog[open]')) return; // the dialog closes itself
       if (panelOpen()) { closeDrawer(); return; }
