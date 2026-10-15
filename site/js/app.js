@@ -142,6 +142,9 @@ function ctx() {
   };
 }
 
+/** The watchlist's state: the search and the sort; every status, no filters. */
+const watchState = () => ({ ...defaultState(), status: [], q: app.state.q, sort: app.state.sort });
+
 /** Recompute results and re-render list, counts, chips and the filter panel. */
 function refresh({ keepScroll = false } = {}) {
   if (!app.loaded) return;
@@ -150,8 +153,9 @@ function refresh({ keepScroll = false } = {}) {
   const watch = store.watchlist();
   let total;
   if (app.listMode === 'watch') {
+    // the starred topics, searched by the search box; the filters do not apply to them
     const recs = app.catalog.filter(r => watch.has(r.id));
-    app.results = runPipeline(recs, { ...defaultState(), status: [], sort: app.state.sort }, { ...c, textScores: null });
+    app.results = runPipeline(recs, watchState(), c);
     total = recs.length;
   } else {
     app.results = runPipeline(app.catalog, app.state, c);
@@ -160,8 +164,10 @@ function refresh({ keepScroll = false } = {}) {
 
   el.sort.value = app.state.sort;
   renderCount(el.count, app.results.length, total, app.listMode);
-  const nChips = app.listMode === 'watch' ? (el.chips.replaceChildren(), 0) : renderActiveChips(el.chips, app.state, app.profilesById, p => setState(p));
-  showFilterCount(nChips);
+  // on the watchlist, only the search has a chip
+  const chipState = app.listMode === 'watch' ? { ...defaultState(), q: app.state.q, sort: app.state.sort } : app.state;
+  const nChips = renderActiveChips(el.chips, chipState, app.profilesById, p => setState(p));
+  showFilterCount(app.listMode === 'watch' ? 0 : nChips); // the filters are not used on the watchlist
   el.showResults.textContent = app.results.length === 1 ? 'Show 1 result' : `Show ${app.results.length.toLocaleString()} results`;
   el.listTitle.textContent = app.listMode === 'watch' ? 'Watchlist' : 'Opportunities';
   if (app.route.name === 'list') setListTitle();
@@ -223,6 +229,10 @@ function syncNav() {
 }
 
 function emptyState() {
+  if (app.listMode === 'watch' && app.state.q && store.watchlist().size) {
+    return h('div', { class: 'empty' }, h('p', { text: `No starred topics match “${app.state.q}”.` }),
+      h('button', { class: 'btn small', type: 'button', text: 'Clear the search', onclick: () => setState({ q: '' }) }));
+  }
   if (app.listMode === 'watch') {
     return h('div', { class: 'empty' }, h('p', { text: 'No starred topics yet.' }),
       h('p', { class: 'small', text: 'Use the ☆ on any topic to keep it here.' }), h('a', { class: 'btn small', href: '#/', text: 'Browse topics' }));

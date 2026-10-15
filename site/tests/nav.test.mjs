@@ -96,8 +96,21 @@ test('back links keep the filter query', () => {
   assert.equal(splitHash(h).path, '/');
   assert.equal(homeHref(defaultState()), '#/');
   assert.equal(watchHref(defaultState()), '#/watch');
+  // the watchlist carries the whole state: its search and sort apply there, the filters are kept for the way back
   assert.deepEqual(parseQuery(splitHash(watchHref(s)).query), s);
+  assert.equal(parseQuery(splitHash(watchHref(s)).query).q, 'counter uas');
   assert.equal(splitHash(watchHref(s)).path, '/watch');
+});
+
+test('the result count calls the watchlist\'s topics "starred"', async () => {
+  const { renderCount } = await import('../js/ui/stats.js');
+  const el = { textContent: '' };
+  renderCount(el, 3, 7, 'watch');
+  assert.equal(el.textContent, '3 of 7 starred');
+  renderCount(el, 7, 7, 'watch');
+  assert.equal(el.textContent, '7 starred');
+  renderCount(el, 54, 68, 'all');
+  assert.equal(el.textContent, '54 of 68 topics');
 });
 
 test('document titles', () => {

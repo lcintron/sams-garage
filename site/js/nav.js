@@ -5,7 +5,8 @@
  *
  * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/notify notifications ·
  * #/settings · #/about. The filter state lives in the query of the list routes (#/?q=uas, #/s/<id>?q=uas,
- * #/watch?sort=title); the other views keep it untouched, so a way back home still has the last filters.
+ * #/watch?q=uas&sort=title); the other views keep it untouched, so a way back home still has the last filters. The
+ * watchlist uses the search and the sort, not the filters (they are kept for the way back).
  */
 import { buildHash } from './filters.js';
 
@@ -59,7 +60,7 @@ export const isSecondary = route => !!route && route.name !== 'detail' && active
 
 /** Home with the filters as they are: the target of every "← Opportunities" back link. */
 export const homeHref = state => buildHash('/', state);
-/** The watchlist; its query carries the sort (the other filters do not apply to it). */
+/** The watchlist. Its query carries the whole state: the search and the sort apply there, the filters wait for home. */
 export const watchHref = state => buildHash('/watch', state);
 
 /** Document title of a view. */

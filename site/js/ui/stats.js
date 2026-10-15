@@ -11,9 +11,9 @@ export function initSort(select, onChange) {
   select.addEventListener('change', () => onChange(select.value));
 }
 
-/** Update the live result count ("54 of 68 topics"). */
+/** Update the live result count ("54 of 68 topics", "3 of 7 starred"). */
 export function renderCount(el, shown, total, mode) {
-  const noun = mode === 'watch' ? 'watched' : 'topics';
+  const noun = mode === 'watch' ? 'starred' : 'topics';
   el.textContent = shown === total ? `${shown.toLocaleString()} ${noun}` : `${shown.toLocaleString()} of ${total.toLocaleString()} ${noun}`;
 }
 
