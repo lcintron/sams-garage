@@ -2,7 +2,7 @@
  * report (PLAN.md "Notifications"). A classic worker on purpose: module service workers would break Firefox's offline
  * support, so the shared notification code is written as classic scripts and loaded with importScripts. */
 importScripts('js/notify/core.js', 'js/notify/idb.js', 'js/notify/runner.js');
-const VERSION = 'sg-0.3.0'; // app version; bump via scripts/release.js
+const VERSION = 'sg-0.4.0'; // app version; bump via scripts/release.js
 const SHELL_CACHE = VERSION + '-shell';
 const DATA_CACHE = 'sg-data'; // not versioned: the last data survives app updates (js/data.js purges old versions)
 // Data caches of earlier names, moved into DATA_CACHE on activate (SBIR Portal was the app's name before).
