@@ -112,6 +112,18 @@ Set up each channel in one place only. A channel set up both in the desktop app 
 reports. You can also have each report shown as a notification on the device that sends it, and clicking it opens the
 report in the app.
 
+**Start at login**, from the tray menu:
+
+| System | What happens |
+|---|---|
+| Windows | The app starts with its window hidden (`--hidden`), in the tray. |
+| macOS | macOS ignores start-up arguments, and "open hidden" since macOS 13. The app notices it was opened at login and starts hidden in the menu-bar icon the same way. |
+| Linux | Electron has no login items. Add the app to your desktop's autostart, with `--hidden` to start it hidden. |
+
+With **Keep running in the tray** on, closing the window on Windows and Linux hides it, and the reports keep their
+schedule. On macOS the app keeps its usual behaviour: it stays in the Dock when its window closes, and has the
+menu-bar icon too.
+
 ### Setting up a channel
 
 Add a channel in **Notifications → Channels**, then use **Send test** to check it before the first report.
@@ -130,8 +142,10 @@ Add a channel in **Notifications → Channels**, then use **Send test** to check
 1. In Teams, open the channel's **⋯** menu → **Workflows**, and pick the template **Post to a channel when a webhook
    request is received**.
 2. Choose the team and channel, then finish. Teams shows the workflow's URL; copy it.
-3. Paste it into a new Microsoft Teams channel in the app. Office 365 connector URLs (`…webhook.office.com…`) are
-   retired and are refused.
+3. In the desktop app, paste it into a new Microsoft Teams channel. Office 365 connector URLs
+   (`…webhook.office.com…`) are retired and are refused.
+4. In the web app, add the Teams channel with only its name. A browser cannot send to Teams, so it never stores the
+   URL. You paste the URL under **Export for GitHub Actions**, and it is used for that export only.
 
 **WhatsApp with CallMeBot** (free, for messages to your own number)
 1. Follow the steps on [CallMeBot's WhatsApp page](https://www.callmebot.com/blog/free-api-whatsapp-messages/): add
@@ -150,27 +164,44 @@ Add a channel in **Notifications → Channels**, then use **Send test** to check
 3. In the app, add a **WhatsApp (Cloud API)** channel with the phone number ID, the token, the recipient's number, the
    template's name and its language code (such as `en_US`). The app fills `{{1}}` with a one-line summary of up to
    1,000 characters, ending with the link.
+4. In the web app, the channel keeps only the template's name and language. The phone number ID, the token and the
+   recipient are typed under **Export for GitHub Actions**, for that export only, as for Teams.
 
 ### GitHub Actions: the SG_NOTIFY_CONFIG secret
 
 1. In the app, open **Notifications** and set it up (channels, keywords, triggers, the daily report switched on).
 2. Choose **Copy settings for GitHub Actions**. This copies your settings, your watchlist and your own keyword profiles
-   as JSON, **including every webhook URL, key and token**.
+   as JSON, **including every webhook URL, key and token**. In the web app, first fill in the Teams and WhatsApp Cloud
+   API fields it asks for there. They go into this export only and are not saved.
 3. In the GitHub repository, go to **Settings → Secrets and variables → Actions → New repository secret**. Name it
    `SG_NOTIFY_CONFIG`, paste the JSON and save.
 
-The scheduled run of [`scrape.yml`](.github/workflows/scrape.yml) then runs `node scripts/notify.mjs` after it commits
-the data. It reports the events of that run and masks every secret in the log. A run you start by hand sends only if
+The scheduled run of [`scrape.yml`](.github/workflows/scrape.yml) then runs `node scripts/notify.mjs` in its own job,
+once the site has been deployed with that data, so the links in the report open on it. It reports the events of that
+run and masks every secret in the log. A run you start by hand sends only if
 you tick **notify**, so a manual refresh never repeats the day's report. A channel that cannot be reached is a warning,
 never a failed workflow. With no secret set, the step does nothing.
 
 ### Privacy
 
-Webhook URLs, keys, tokens and phone numbers stay on your device. In the browser they are kept in IndexedDB, and in the
-desktop app they are encrypted on disk. The only other place they go is the repository secret, if you export them
-there. They never appear in the app's own URLs or in logs, and the GitHub Actions step masks them. Anyone who has a
-webhook URL can post to that channel, so treat the exported JSON like a password. Reports go straight from your device,
-or from GitHub Actions, to the platform you chose. No SAM's Garage server is involved.
+Webhook URLs, keys, tokens and phone numbers stay on your device:
+- The desktop app encrypts them on disk with the system keychain. Where there is none, it stores them unencrypted and
+  says so.
+- The web app keeps in IndexedDB only those for the channels a browser can send to (Slack, Discord, CallMeBot). Teams
+  and WhatsApp Cloud API secrets are never stored in the browser; they are typed at export time.
+- The only other place they go is the repository secret, if you export them there.
+
+They never appear in the app's own URLs or in logs, and the GitHub Actions step masks them. The secret fields are
+marked so that browsers and password managers do not offer to save them.
+
+**Shared address.** While the web app lives at `lcintron.github.io/sams-garage/`, it shares its browser storage origin
+(`lcintron.github.io`) with every other GitHub Pages site of that account. Any of those sites could read what this one
+keeps in the browser, webhooks included. The app warns about this when you add a channel there. Until it moves to its
+own domain, prefer the desktop app or GitHub Actions for webhooks and keys.
+
+Anyone who has a webhook URL can post to that channel, so treat the exported JSON like a password. **About → Clear
+watchlist, profiles, saved searches and notification settings** deletes all of it from the device. Reports go straight
+from your device, or from GitHub Actions, to the platform you chose. No SAM's Garage server is involved.
 
 ## How the data stays fresh
 

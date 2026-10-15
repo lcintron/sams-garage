@@ -340,12 +340,16 @@ Each channel has its own run state: `{date, at, slot, through, failDate, tries, 
 even before that day's time. After the time, a checked slot keeps being watched for the rest of the day: a check reads
 `meta.json` only, and fetches more only when `last_run` has passed `through`. So data published later that day is
 still reported that day. A failed send is retried once at the next check that day (`channelDue`). Its window does not
-move, so the next report still includes what failed.
+move, so the next report still includes what failed. A report dated after today (the clock moved backwards) means not
+due, so a date never gets two reports. `runDue` hands the run state to a `persist` hook after every channel's result,
+so a crash or a closed tab in the middle of a run never resends what already went out. Errors are redacted (every
+secret value of the settings) before they are stored or returned.
 
 The window is by **data**, not wall time: events with `through < at <= meta.last_run`. Scrape runs stamp every event
 with the run's `last_run`, so this is exact even when a deploy lands after a check. A channel's first report covers the
 24 h of data before `last_run`. Calendar dates come from local calendar fields, never by adding hours, so DST changes
-are safe.
+are safe. When a window starts before the oldest event `changes.json` holds (its `since`), the digest is `partial`
+and every format says "Some earlier changes are not included; open the app for the full history."
 
 The OS notification is a pseudo-channel `__local` with the same rules. It is opt-out with `background.osNotification`.
 
@@ -367,28 +371,38 @@ treats it like catalog.json (stale-while-revalidate, network-first with `no-stor
 
 | Runtime | Settings | Run state, last report | Secrets |
 |---|---|---|---|
-| Web | IndexedDB `sg` / `kv` (`notify-settings`) | `notify-state`, `notify-last-report` | In IndexedDB, on the device. |
+| Web | IndexedDB `sg` / `kv` (`notify-settings`) | `notify-state`, `notify-last-report` | Only for channels a browser sends to (Slack, Discord, CallMeBot). Teams and Cloud API secrets are typed at export time and never stored (`browserStorable`, `buildExport`). On `*.github.io` the channel form warns that the origin is shared. |
 | Desktop | `<userData>/notify.json`, through the preload bridge | The same file | Encrypted per field with `safeStorage`. Without a keychain they are stored plain, flagged, and the page warns. |
 | Actions | The `SG_NOTIFY_CONFIG` secret | None (one report per run) | The repository secret. Every value is `::add-mask::`ed first. |
 
 The page also mirrors the watchlist and the user's profiles into IndexedDB (web) or the bridge (desktop) on every
-change. On the web, a lease lock in IndexedDB (`lock:notify`, 2 min) stops the page and the service worker from
-sending twice.
+change. On the web, a lease lock in IndexedDB (`lock:notify`) stops two tabs and the service worker from sending
+twice. Each execution context has its own owner (`page:<uuid>`, `sw:<uuid>`). The lease (90 s) covers loading the data
+(two fetches of at most 30 s each) and is renewed before every send (`beforeSend`); a sender that lost it stops.
+
+The page loads the notification code after its first paint (`js/notify/page.js` by dynamic import). `core.js` itself
+stays on the boot path because `profiles.js` matches with it. The view saves with a debounce that is flushed on
+`pagehide` and when the page is hidden. Each save reloads the stored settings and re-applies the view's pending
+changes, so it never writes back a stale value; the desktop tray's changes reach the view through `notify:changed`.
+**Clear local data** also deletes the notification keys (or `notify.json` on the desktop, through `notify:reset`),
+and a removed channel's run state is dropped (`pruneState`).
 
 Secrets never go in the app's own URLs or in logs. `redactRequest` and the dry run replace them with `[redacted]`.
 
 ### 11.6 Desktop specifics
-- **Tray menu:** Open, Send today's report now, Pause/Resume, Notification settings, Start at login (`openAtLogin` with `--hidden`), Keep running in the tray, Quit.
-- **Closing the window:** with keep-in-tray on (Windows, Linux), closing hides the window. macOS keeps its Dock behaviour and has the tray too.
+- **Tray menu:** Open, Send today's report now, Pause/Resume, Notification settings, Start at login, Keep running in the tray, Quit.
+- **Start at login:** Windows uses `openAtLogin` with `--hidden`. macOS ignores the arguments (and `openAsHidden` on 13+), so the app starts hidden when `getLoginItemSettings().wasOpenedAtLogin` is true. Linux has no login items in Electron.
+- **Closing the window:** with keep-in-tray on (Windows, Linux), closing hides the window. macOS keeps its Dock behaviour and has the tray too. `session-end` (Windows shutdown or sign-out) lets the window close.
+- **notify.json:** a secret that fails to decrypt keeps its encrypted blob and is written back unchanged. Writes of the run state, the watchlist or the profiles touch only that part. Every write merges into the file as it is on disk, which is read again whenever it changed.
 - **Single instance:** `requestSingleInstanceLock`. A second launch shows the first window.
 - **Notification click:** opens `#/notify?report=last`.
 - **Checks:** `--notify-dry-run` prints each channel's report and redacted request without sending. `--notify-check` runs one scheduled check. `--notify-file=<path>` and `SG_LIVE_BASE` are for local testing only.
 
 ### 11.7 GitHub Actions
-In `scrape.yml`, after "Commit and push data":
-1. `setup-node@v7` with Node 22.
-2. `node scripts/notify.mjs`, with `SG_NOTIFY_CONFIG` from the secret.
+In `scrape.yml`, a job `notify` that `needs: [scrape, build-deploy]`, so the report's links open on the deployed data.
+It checks out the pushed sha, sets up Node 22 with `setup-node@v7`, and runs `node scripts/notify.mjs` with
+`SG_NOTIFY_CONFIG` from the secret. It has `contents: read` only.
 
-The step runs only for `schedule`, or for `workflow_dispatch` with the boolean input `notify` (default false), and has
-`continue-on-error`. The script reports the events whose `at` equals `meta.last_run`, so there is no state to keep.
+The job runs when the scrape succeeded, and only for `schedule` or for `workflow_dispatch` with the boolean input
+`notify` (default false). It has `continue-on-error`. The script reports the events whose `at` equals `meta.last_run`, so there is no state to keep.
 A send failure is a warning, and the script exits 0.
