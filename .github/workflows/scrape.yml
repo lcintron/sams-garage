@@ -7,6 +7,11 @@ name: Scrape and deploy
 #   * "Nothing changed" is not an error, and the site is redeployed anyway so meta.json's build time
 #     stays fresh.
 #   * The push uses GITHUB_TOKEN, which starts no other workflow run.
+#   * Then, once Pages is deployed (so the report's links open on this data), the notify job sends the daily
+#     notification report (scripts/notify.mjs) for the events of this run to the channels in the SG_NOTIFY_CONFIG
+#     repository secret (none set: nothing happens). Only the scheduled run sends, or a manual run with "notify"
+#     ticked, so a run started by hand never sends the day's report twice. A channel that cannot be reached is a
+#     warning, never a failed workflow.
 # Repository setting required once: Settings -> Pages -> Source: "GitHub Actions".
 on:
   schedule:
@@ -17,6 +22,11 @@ on:
         description: Per-source record cap (debug; empty = no cap)
         required: false
         default: ''
+      notify:
+        description: Send the notification report for this run (SG_NOTIFY_CONFIG)
+        type: boolean
+        required: false
+        default: false
 
 env:
   # The public site's address (link previews, the desktop app's shared links): scripts/site-url.sh.
@@ -128,3 +138,32 @@ jobs:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  notify:
+    name: Send the notification report
+    # After the deploy, so the links in the report open on this data. Runs when the scrape succeeded, for the daily
+    # schedule or a manual run with "notify" ticked; a deploy that failed does not hold the report back.
+    needs: [scrape, build-deploy]
+    if: >-
+      always() && needs.scrape.result == 'success' &&
+      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.notify))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true   # a webhook that fails is a warning, never a failed workflow
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.scrape.outputs.sha }}   # the commit the scrape job pushed: this run's data
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false   # no lock file; the script needs no npm install
+      - name: Send notifications
+        # The events of this run only (changelog "at" == meta.json last_run): see scripts/notify.mjs. The secret reaches
+        # the script only through the environment; the script masks every webhook URL, key and token it contains.
+        env:
+          SG_NOTIFY_CONFIG: ${{ secrets.SG_NOTIFY_CONFIG }}
+        run: node scripts/notify.mjs

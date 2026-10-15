@@ -59,12 +59,24 @@ export function get(key, fallback = null) {
 }
 
 export function set(key, value) {
-  try { storage().setItem(PREFIX + key, JSON.stringify(value)); return true; } catch { return false; }
+  let ok;
+  try { storage().setItem(PREFIX + key, JSON.stringify(value)); ok = true; } catch { ok = false; }
+  changed(key);
+  return ok;
 }
 
 export function remove(key) {
   try { storage().removeItem(PREFIX + key); } catch { /* ignore */ }
+  changed(key);
 }
+
+// ---------- change listeners ----------
+// The notifications need copies of the watchlist and the user's profiles where a service worker or the desktop app can
+// read them (js/notify/page.js mirrors them on every change).
+const listeners = new Set();
+/** Call fn(key) after every set/remove; returns an unsubscribe function. */
+export function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+function changed(key) { for (const fn of listeners) { try { fn(key); } catch { /* a listener never breaks storage */ } } }
 
 // ---------- watchlist ----------
 export function watchlist() { const w = get('watchlist', []); return new Set(Array.isArray(w) ? w : []); }

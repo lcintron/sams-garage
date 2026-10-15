@@ -8,6 +8,8 @@
         search-index.json      documents for MiniSearch (see below)
         solicitations.sqlite   SQLite DB for the SQL console (stdlib sqlite3)
         agencies.json          agency / sub-agency display names and counts for the filter panel
+        changes.json           the changelog events of the 30 days up to the last run, for the daily notification
+                               reports (site/js/notify/core.js)
 
 search-index.json is a plain array of documents, not MiniSearch's serialized index: producing
 MiniSearch's internal format from Python would couple us to its private layout. The site builds the
@@ -34,7 +36,7 @@ import shutil
 import sqlite3
 import tempfile
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +50,9 @@ SCHEMA_VERSION = 1
 # installed app could not read; apps that know an older format keep their data and ask for an update
 # (site/js/data.js DATA_FORMAT, electron/protocol.js DATA_FORMAT).
 SITE_FORMAT = 1
+# changes.json was added in format 1: an added file is backward compatible (apps that do not know it never ask for
+# it), so it needs no format bump.
+CHANGES_DAYS = 30
 CATALOG_SUMMARY_MAX = 240
 CATALOG_KEYWORDS_MAX = 15
 INDEX_DESCRIPTION_MAX = 4000
@@ -80,6 +85,7 @@ def build(data_dir: str | os.PathLike[str], out_dir: str | os.PathLike[str], bui
         "catalog.json": _json_bytes([catalog_entry(record) for record in records]),
         "search-index.json": _json_bytes([search_document(record) for record in records]),
         "agencies.json": _json_bytes(agencies(records), pretty=True),
+        "changes.json": _json_bytes(changes(changelog, meta_in)),
     }
     version = data_version(records, changelog)
     files["meta.json"] = _json_bytes(site_meta(records, meta_in, version, build_time), pretty=True)
@@ -153,6 +159,39 @@ def agencies(records: list[Record]) -> list[dict[str, Any]]:
         }
         for code in sorted(totals)
     ]
+
+
+def changes(changelog: list[dict[str, Any]], meta_in: dict[str, Any], days: int = CHANGES_DAYS) -> dict[str, Any]:
+    """The changelog events of the ``days`` days up to the last run: ``{last_run, since, events}``.
+
+    The window ends at ``meta.last_run`` (else the newest event), never at the clock, so the file is a pure function
+    of data/. Events keep their changelog.jsonl shape ({at, id, event, from, to[, fields]}) and are sorted by time,
+    then id, then kind. ``since`` is exclusive: a report whose window starts before it cannot be complete.
+    """
+    times = [str(event.get("at")) for event in changelog if event.get("at")]
+    last_run = meta_in.get("last_run") or (max(times) if times else None)
+    end = _parse_ts(last_run)
+    if end is None:
+        return {"last_run": last_run, "since": None, "events": []}
+    since = utc_timestamp(end - timedelta(days=days))
+    events = [
+        {key: event[key] for key in ("at", "id", "event", "from", "to", "fields") if key in event}
+        for event in changelog
+        if since < str(event.get("at") or "") <= last_run
+    ]
+    order = {"new": 0, "status": 1, "updated": 2, "missing": 3}
+    events.sort(key=lambda event: (str(event["at"]), str(event["id"]), order.get(str(event.get("event")), 9)))
+    return {"last_run": last_run, "since": since, "events": events}
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def counts(records: list[Record]) -> dict[str, Any]:

@@ -271,3 +271,138 @@ Agent B — "frontend" (owns site/, serve.js, package.json, .claude/launch.json,
 B must not wait for A: generate a fixture `site/data/` from `open_sbir_topics.json` with a tiny throwaway script (delete it after A's build works) that follows §4/§5 exactly, so UI work can start immediately. A must produce `site/data/` from real scrapes via `python -m scraper build`. Fable integrates: runs a real quick scrape + build, serves, reviews, sends fixes back to the owning agent.
 
 Neither agent commits. Fable commits once the review passes; the user pushes after giving the GitHub location.
+
+---
+
+## 11. Notifications (daily reports to messaging platforms)
+
+Users connect channels (Slack, Discord, Microsoft Teams, WhatsApp) and choose keywords, hashtags and keyword profiles.
+Each channel gets **at most one report per local calendar day, and only when there is something to report**. User
+documentation: README "Notifications".
+
+### 11.1 What a report holds
+Three triggers, each can be switched off:
+- **starred**: any `status` / `updated` / `missing` event on a watchlist topic, whatever the keywords;
+- **new**: a `new` event on a topic that matches the terms;
+- **updated**: a `status` or `updated` event on a topic that matches the terms.
+
+The terms are the keywords as typed (`#tag` allowed) plus the terms of the chosen profiles. Matching is the profiles'
+matching (whole word or phrase, any case, hyphen ≈ space, leading `#` stripped). It now lives in one place,
+`site/js/notify/core.js`, and `profiles.js` re-exports it. A topic appears once, in its highest-priority section
+(starred > new > updated). Each section lists at most 15 topics, sorted by close date, with an "and N more" note.
+Events logged under an absorbed id (`alt_ids`) count for the record that holds it now; watchlist ids are resolved the
+same way. Every message ends with a link to the app, and every topic links to `<PUBLIC_URL>#/s/<id>`.
+
+### 11.2 One engine, four runtimes
+`site/js/notify/core.js` is a **classic script** that sets `globalThis.SgNotify`. It has no import/export, no DOM, no
+fetch and no storage, so the same file runs in all four runtimes:
+
+| Runtime | How it loads core.js | Sends with | Schedule |
+|---|---|---|---|
+| Page | `import './notify/core.js'` (side effect), via `js/notify/page.js` | `fetch` (`cors` / `no-cors`) | on load and when visible |
+| Service worker | `importScripts` (sw.js stays a classic worker: module workers break Firefox offline) | `fetch` | Periodic Background Sync `sg-daily-report`, min 12 h |
+| Electron main | `electron/notify-core.js` runs the file with `vm` (works with or without `site/package.json`, which the installer drops) | `net.fetch` | every 15 min, `powerMonitor` resume / unlock-screen |
+| GitHub Actions | `import` from `scripts/notify.mjs` | `fetch` | after each scheduled scrape |
+
+core.js provides:
+- term matching;
+- `buildDigest({records, events, since, until, settings, watchlist, profiles})`, which returns null or `{sections, counts, since, until}`;
+- one formatter per platform, plus `format.summary` for OS notifications;
+- `buildRequest(channel, digest, ctx)`, which returns `{url, method, headers, body, browserMode}`;
+- `interpretResponse`;
+- secret discovery and redaction;
+- the scheduling helpers `localDate`, `isDue` and `channelDue`;
+- `runDue`, the run loop that every runtime except Actions shares. The runtimes pass the I/O in: `loadMeta`, `loadData`, `send` and `local`.
+
+`browserMode`:
+
+| Channel | browserMode | How a browser sends it |
+|---|---|---|
+| Discord | `cors` | A normal request. |
+| Slack | `no-cors` | The body is form-encoded as `payload=<json>`, which Slack accepts and which needs no preflight. |
+| CallMeBot | `no-cors` | A GET. |
+| Teams, WhatsApp Cloud | `unsupported` | It cannot. Desktop app or Actions only. |
+
+Platform limits enforced by the formatters:
+- **Slack:** at most 50 blocks and 3,000 characters per section text; `& < >` escaped in mrkdwn.
+- **Discord:** at most 10 embeds, 4,096 characters per description and 6,000 in all. A long report is split into embeds, never into extra messages. `allowed_mentions: {parse: []}` is set, and markdown is escaped.
+- **Teams:** an Adaptive Card 1.4 sent through a Workflows webhook.
+- **CallMeBot:** plain text of at most 1,500 characters.
+- **Cloud API:** a template message whose one body parameter is a single line of at most 1,000 characters. Graph refuses new lines, tabs and runs of 4 or more spaces in template parameters.
+
+### 11.3 Scheduling
+Each channel has its own run state: `{date, at, slot, through, failDate, tries, error}`.
+- `date` is the last local date a report was sent. A channel never gets two reports on one date.
+- `slot` is the last report slot that was checked. A slot is today once the configured time has passed, else yesterday.
+- `through` is the data watermark: the `last_run` of the data the last report (or an empty check) covered.
+
+`isDue` sends at or after the time. A slot that was never checked (the device was off) is caught up at the next check,
+even before that day's time. After the time, a checked slot keeps being watched for the rest of the day: a check reads
+`meta.json` only, and fetches more only when `last_run` has passed `through`. So data published later that day is
+still reported that day. A failed send is retried once at the next check that day (`channelDue`). Its window does not
+move, so the next report still includes what failed. A report dated after today (the clock moved backwards) means not
+due, so a date never gets two reports. `runDue` hands the run state to a `persist` hook after every channel's result,
+so a crash or a closed tab in the middle of a run never resends what already went out. Errors are redacted (every
+secret value of the settings) before they are stored or returned.
+
+The window is by **data**, not wall time: events with `through < at <= meta.last_run`. Scrape runs stamp every event
+with the run's `last_run`, so this is exact even when a deploy lands after a check. A channel's first report covers the
+24 h of data before `last_run`. Calendar dates come from local calendar fields, never by adding hours, so DST changes
+are safe. When a window starts before the oldest event `changes.json` holds (its `since`), the digest is `partial`
+and every format says "Some earlier changes are not included; open the app for the full history."
+
+The OS notification is a pseudo-channel `__local` with the same rules. It is opt-out with `background.osNotification`.
+
+### 11.4 Data
+`scraper/build.py` also writes `site/data/changes.json`: `{last_run, since, events}`. It holds the changelog events of
+the 30 days up to `last_run`, sorted by (at, id, kind), in the shape of changelog.jsonl. It is a pure function of
+`data/`, so it is deterministic. An added file is backward compatible, so the site format stays 1. The service worker
+treats it like catalog.json (stale-while-revalidate, network-first with `no-store`).
+
+### 11.5 Settings and storage
+```
+{ enabled, time: "08:00",
+  channels: [{id, type: "slack"|"discord"|"teams"|"whatsapp", provider?: "callmebot"|"cloud", name, enabled, ...fields}],
+  triggers: {profiles: [ids], keywords: [strings, '#tags' allowed], newMatches, updatedMatches, starred},
+  lastSent: {date, at},
+  background: {tray, browser, osNotification} }
+```
+`enabled` defaults to false: nothing is sent, and no OS notification shown, until the user switches the reports on.
+
+| Runtime | Settings | Run state, last report | Secrets |
+|---|---|---|---|
+| Web | IndexedDB `sg` / `kv` (`notify-settings`) | `notify-state`, `notify-last-report` | Only for channels a browser sends to (Slack, Discord, CallMeBot). Teams and Cloud API secrets are typed at export time and never stored (`browserStorable`, `buildExport`). On `*.github.io` the channel form warns that the origin is shared. |
+| Desktop | `<userData>/notify.json`, through the preload bridge | The same file | Encrypted per field with `safeStorage`. Without a keychain they are stored plain, flagged, and the page warns. |
+| Actions | The `SG_NOTIFY_CONFIG` secret | None (one report per run) | The repository secret. Every value is `::add-mask::`ed first. |
+
+The page also mirrors the watchlist and the user's profiles into IndexedDB (web) or the bridge (desktop) on every
+change. On the web, a lease lock in IndexedDB (`lock:notify`) stops two tabs and the service worker from sending
+twice. Each execution context has its own owner (`page:<uuid>`, `sw:<uuid>`). The lease (90 s) covers loading the data
+(two fetches of at most 30 s each) and is renewed before every send (`beforeSend`); a sender that lost it stops.
+
+The page loads the notification code after its first paint (`js/notify/page.js` by dynamic import). `core.js` itself
+stays on the boot path because `profiles.js` matches with it. The view saves with a debounce that is flushed on
+`pagehide` and when the page is hidden. Each save reloads the stored settings and re-applies the view's pending
+changes, so it never writes back a stale value; the desktop tray's changes reach the view through `notify:changed`.
+**Clear local data** also deletes the notification keys (or `notify.json` on the desktop, through `notify:reset`),
+and a removed channel's run state is dropped (`pruneState`).
+
+Secrets never go in the app's own URLs or in logs. `redactRequest` and the dry run replace them with `[redacted]`.
+
+### 11.6 Desktop specifics
+- **Tray menu:** Open, Send today's report now, Pause/Resume, Notification settings, Start at login, Keep running in the tray, Quit.
+- **Start at login:** Windows uses `openAtLogin` with `--hidden`. macOS ignores the arguments (and `openAsHidden` on 13+), so the app starts hidden when `getLoginItemSettings().wasOpenedAtLogin` is true. Linux has no login items in Electron.
+- **Closing the window:** with keep-in-tray on (Windows, Linux), closing hides the window. macOS keeps its Dock behaviour and has the tray too. `session-end` (Windows shutdown or sign-out) lets the window close.
+- **notify.json:** a secret that fails to decrypt keeps its encrypted blob and is written back unchanged. Writes of the run state, the watchlist or the profiles touch only that part. Every write merges into the file as it is on disk, which is read again whenever it changed.
+- **Single instance:** `requestSingleInstanceLock`. A second launch shows the first window.
+- **Notification click:** opens `#/notify?report=last`.
+- **Checks:** `--notify-dry-run` prints each channel's report and redacted request without sending. `--notify-check` runs one scheduled check. `--notify-file=<path>` and `SG_LIVE_BASE` are for local testing only.
+
+### 11.7 GitHub Actions
+In `scrape.yml`, a job `notify` that `needs: [scrape, build-deploy]`, so the report's links open on the deployed data.
+It checks out the pushed sha, sets up Node 22 with `setup-node@v7`, and runs `node scripts/notify.mjs` with
+`SG_NOTIFY_CONFIG` from the secret. It has `contents: read` only.
+
+The job runs when the scrape succeeded, and only for `schedule` or for `workflow_dispatch` with the boolean input
+`notify` (default false). It has `continue-on-error`. The script reports the events whose `at` equals `meta.last_run`, so there is no state to keep.
+A send failure is a warning, and the script exits 0.
