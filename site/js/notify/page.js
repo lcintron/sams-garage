@@ -42,7 +42,9 @@ export async function load() {
   const settings = N.browserStorable(stored);
   // settings from before that rule may still hold such a secret: drop it from storage now
   if (stored && JSON.stringify(settings) !== JSON.stringify(N.normalizeSettings(stored))) await kv.set(R.KEYS.settings, settings);
-  return { settings, state: N.cloneState(state), lastReport: lastReport || null };
+  const st = N.cloneState(state);
+  // the run state is stored after every channel, the last-report key only at the end of a run: prefer the former
+  return { settings, state: st, lastReport: st.lastReport || lastReport || null };
 }
 
 /** Store the settings (normalized) and bring the background schedule in line with them. */

@@ -97,6 +97,16 @@ test('Clear local data removes every notification key, the lock and the copies',
   assert.deepEqual([...idb.data.keys()], []);
 });
 
+test('the last report comes from the run state, which is stored after every channel', async () => {
+  await page.reset();
+  await globalThis.SgIdb.set('notify-state', { channels: {}, lastReport: { at: '2026-10-09T12:00:00Z', digest: { counts: { total: 1 } } } });
+  assert.equal((await page.load()).lastReport.at, '2026-10-09T12:00:00Z', 'a run cut short before its final write still shows its report');
+  await globalThis.SgIdb.set('notify-state', { channels: {} });
+  await globalThis.SgIdb.set('notify-last-report', { at: 'older' });
+  assert.equal((await page.load()).lastReport.at, 'older', 'the separate key is the fallback');
+  await page.reset();
+});
+
 test('saving drops the run state of a removed channel', async () => {
   await page.save(SETTINGS);
   await globalThis.SgIdb.set('notify-state', { channels: { s: { date: '2026-10-09' }, gone: { date: '2026-10-08' }, __local: { date: '2026-10-09' } } });
