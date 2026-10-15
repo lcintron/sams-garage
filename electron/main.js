@@ -5,8 +5,14 @@
  *        electron . --notify-dry-run   print today's notification report for each channel, built from live data with
  *                                  the saved settings, and the request each channel would get (secrets redacted);
  *                                  sends nothing
- *        electron . --notify-check     run one scheduled notification check (sends what is due), print it, exit
+ *        electron . --notify-check     run one scheduled notification check (sends what is due), print it, exit.
+ *                                  For testing: run it while the tray app is running only with another --notify-file
+ *                                  (two processes on one file can overwrite each other's run state)
  *        --notify-file=<path>      use another settings file than <userData>/notify.json (with the two above: testing)
+ *
+ * Start at login (tray menu): Windows starts the app with --hidden; macOS ignores login-item arguments (and
+ * openAsHidden on macOS 13+), so a launch at login is detected with app.getLoginItemSettings().wasOpenedAtLogin and
+ * starts hidden in the tray the same way; Linux has no login items in Electron (use the desktop's autostart).
  *
  * The page is the web app itself (site/), served from app://sg/ by electron/protocol.js. Its data comes from the live
  * site when it can be reached, else from the last copy kept, else from the snapshot bundled with the app. The daily
@@ -69,7 +75,14 @@ function openApp(hash) {
   }
 }
 
-function createWindow({ show = !SMOKE && !HIDDEN } = {}) {
+/** Start without showing the window: --hidden (Windows login item, by hand), or a macOS launch at login. */
+function startHidden() {
+  if (HIDDEN) return true;
+  if (process.platform !== 'darwin') return false;
+  try { return !!app.getLoginItemSettings().wasOpenedAtLogin; } catch (e) { return false; }
+}
+
+function createWindow({ show = !SMOKE && !startHidden() } = {}) {
   const win = new BrowserWindow(Object.assign({
     width: 1400, height: 900, minWidth: 900, minHeight: 520,
     title: "SAM's Garage", backgroundColor: '#0b1118', autoHideMenuBar: true, show,
@@ -94,6 +107,8 @@ function createWindow({ show = !SMOKE && !HIDDEN } = {}) {
       win.hide();
     }
   });
+  // Windows shutdown or sign-out: let the window close (before-quit may not come first)
+  win.on('session-end', () => { quitting = true; });
 
   win.loadURL(APP_PAGE);
   return win;

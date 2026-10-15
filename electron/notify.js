@@ -7,7 +7,7 @@
  * encrypted with safeStorage), notify-scheduler.js (when to check, what to send) and site/js/notify/core.js (the
  * report itself, shared with the web app and GitHub Actions).
  */
-const { app, ipcMain, Menu, Notification, Tray, nativeImage, net, powerMonitor, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, net, powerMonitor, safeStorage } = require('electron');
 const path = require('path');
 const { loadCore } = require('./notify-core');
 const { createStore } = require('./notify-store');
@@ -56,6 +56,12 @@ function createNotifications(o) {
   let tray = null;
   let timer = null;
 
+  /** Settings changed here (the tray): tell the page, which shows them again instead of saving stale values. */
+  function settingsChanged() {
+    refreshTray();
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('notify:changed');
+  }
+
   function start() {
     setTimeout(() => scheduler.check('start').catch(e => log('notifications: ' + e.message)), FIRST_CHECK_MS).unref?.();
     timer = setInterval(() => scheduler.check('timer').catch(e => log('notifications: ' + e.message)), CHECK_MS);
@@ -70,6 +76,8 @@ function createNotifications(o) {
     ipcMain.handle('notify:test', guard(ch => scheduler.sendTest(ch)));
     ipcMain.handle('notify:now', guard(() => scheduler.check('send now', 'now')));
     ipcMain.handle('notify:status', guard(() => status()));
+    // "Clear local data": delete notify.json (settings, encrypted secrets, run state, copies of watchlist and profiles)
+    ipcMain.handle('notify:reset', guard(() => { store.reset(); refreshTray(); return true; }));
     ipcMain.on('notify:watchlist', (e, ids) => { if (fromApp(e)) store.setWatchlist(ids); });
     ipcMain.on('notify:profiles', (e, list) => { if (fromApp(e)) store.setProfiles(list); });
   }
@@ -107,14 +115,16 @@ function createNotifications(o) {
     return Menu.buildFromTemplate([
       { label: "Open SAM's Garage", click: () => o.openApp && o.openApp() },
       { label: "Send today's report now", click: sendNow },
-      { label: s.enabled ? 'Pause notifications' : 'Resume notifications', click: () => { store.saveSettings({ ...s, enabled: !s.enabled }); refreshTray(); } },
+      { label: s.enabled ? 'Pause notifications' : 'Resume notifications', click: () => { const now = store.getSettings(); store.saveSettings({ ...now, enabled: !now.enabled }); settingsChanged(); } },
       { label: 'Notification settings…', click: () => o.openApp && o.openApp('#/notify') },
       { type: 'separator' },
       {
+        // Windows starts the app with --hidden. macOS ignores args (and openAsHidden since macOS 13): main.js asks
+        // app.getLoginItemSettings().wasOpenedAtLogin instead. Linux has no login items in Electron.
         label: 'Start at login', type: 'checkbox', checked: login, enabled: process.platform !== 'linux',
-        click: item => { app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true, args: ['--hidden'] }); refreshTray(); }
+        click: item => { app.setLoginItemSettings(process.platform === 'win32' ? { openAtLogin: item.checked, args: ['--hidden'] } : { openAtLogin: item.checked }); refreshTray(); }
       },
-      { label: 'Keep running in the tray', type: 'checkbox', checked: s.background.tray, click: item => { store.saveSettings({ ...s, background: { ...s.background, tray: item.checked } }); refreshTray(); } },
+      { label: 'Keep running in the tray', type: 'checkbox', checked: s.background.tray, click: item => { const now = store.getSettings(); store.saveSettings({ ...now, background: { ...now.background, tray: item.checked } }); settingsChanged(); } },
       { type: 'separator' },
       { label: 'Quit', role: 'quit' }
     ]);

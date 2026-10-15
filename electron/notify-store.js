@@ -90,6 +90,13 @@ function createStore(o) {
     if (cache && cache.mtime === m) return cache;
     const doc = readDoc();
     const { settings, kept } = open(doc.settings);
+    // secrets stored as plain text (no keychain back then, or a file written by hand) are encrypted once one is there
+    const plainOnDisk = (doc.settings && Array.isArray(doc.settings.channels) ? doc.settings.channels : [])
+      .some(ch => ch && N.normalizeChannel(ch) && secretKeys(N.normalizeChannel(ch)).some(k => typeof ch[k] === 'string' && ch[k]));
+    if (plainOnDisk && canEncrypt()) {
+      const { settings: sealed, plaintext } = seal(settings, kept);
+      try { write({ settings: sealed, plaintextSecrets: plaintext }); return read(); } catch (e) { onNote('notify.json could not be re-encrypted: ' + e.message); }
+    }
     cache = {
       mtime: m, settings, kept,
       state: N.cloneState(doc.state),

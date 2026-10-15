@@ -15,11 +15,21 @@ if (location.protocol === 'app:' && location.host === 'sg') contextBridge.expose
     saveSettings: s => ipcRenderer.invoke('notify:save', s),
     sendTest: channel => ipcRenderer.invoke('notify:test', channel),
     sendNow: () => ipcRenderer.invoke('notify:now'),
-    status: () => ipcRenderer.invoke('notify:status')
+    status: () => ipcRenderer.invoke('notify:status'),
+    reset: () => ipcRenderer.invoke('notify:reset'), // "Clear local data"
+    onChanged: fn => ipcRenderer.on('notify:changed', () => fn()) // the tray changed the settings
   },
   // copies of the watchlist and the user's keyword profiles, which the reports use while the window is closed
   setWatchlist: ids => ipcRenderer.send('notify:watchlist', Array.isArray(ids) ? ids.map(String) : []),
   setProfiles: list => ipcRenderer.send('notify:profiles', Array.isArray(list) ? list : []),
-  // the main process opens a view (a click on the report notification): '#/notify?report=last'
-  onNavigate: fn => ipcRenderer.on('app:navigate', (e, hash) => { if (typeof hash === 'string') fn(hash); })
+  // the main process opens a view (a click on the report notification): '#/notify?report=last'. A request that
+  // arrives before the page listens (it loads the notification code after its first paint) is kept for it.
+  onNavigate: fn => { navigateTo = fn; if (pendingHash) { const h = pendingHash; pendingHash = null; fn(h); } }
+});
+
+let navigateTo = null;
+let pendingHash = null;
+ipcRenderer.on('app:navigate', (e, hash) => {
+  if (typeof hash !== 'string') return;
+  if (navigateTo) navigateTo(hash); else pendingHash = hash;
 });

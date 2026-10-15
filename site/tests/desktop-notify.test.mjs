@@ -70,6 +70,17 @@ test('store: without a keychain secrets are stored as they are, flagged; undecry
   assert.equal(notes.length, 1);
 });
 
+test('store: plain secrets in the file are encrypted once a keychain is there', () => {
+  const file = tmp();
+  createStore({ file, N, cipher: cipher(false) }).saveSettings({ channels: [{ id: 'd', type: 'discord', url: DISCORD }] });
+  assert.ok(fs.readFileSync(file, 'utf8').includes(DISCORD), 'no keychain: plain');
+  const s = createStore({ file, N, cipher: cipher() });
+  assert.equal(s.getSettings().channels[0].url, DISCORD);
+  const disk = fs.readFileSync(file, 'utf8');
+  assert.ok(!disk.includes(DISCORD), 'encrypted on the first read');
+  assert.equal(JSON.parse(disk).plaintextSecrets, false);
+});
+
 test('store: a secret that fails to decrypt once is kept and comes back when the keychain answers', () => {
   const file = tmp();
   createStore({ file, N, cipher: cipher() }).saveSettings({ enabled: true, channels: [{ id: 'd', type: 'discord', url: DISCORD }, CMB] });
@@ -103,6 +114,9 @@ test('store: writes merge into the file as it is now, and a changed file is read
   assert.equal(createStore({ file, N, cipher: cipher() }).getState().channels.d.date, '2026-10-09');
   assert.equal(a.getState().channels.d.date, '2026-10-09');
   assert.deepEqual(b.getWatchlist(), ['w1']);
+  b.setState({ channels: { d: { date: '2026-10-09' }, __local: { date: '2026-10-09' } } });
+  a.saveSettings({ ...a.getSettings(), channels: [] }); // the channel is removed: its run state goes too
+  assert.deepEqual(Object.keys(b.getState().channels), ['__local']);
   a.reset();
   assert.ok(!fs.existsSync(file));
   assert.deepEqual(a.getSettings(), N.defaultSettings());
