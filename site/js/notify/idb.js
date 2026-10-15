@@ -7,7 +7,8 @@
  * loads it with importScripts. SgIdb.create(factory) makes one over another IndexedDB (tests).
  *
  *   get(key) · set(key, value) · del(key) · update(key, fn)   fn(old) -> new, in one transaction
- *   lock(name, owner, ttlMs) -> boolean · unlock(name, owner)   a lease shared by page and worker, so a report is
+ *   lock(name, owner, ttlMs) -> boolean · renew(name, owner, ttlMs) -> boolean (only while still held)
+ *   unlock(name, owner)                                         a lease shared by page and worker, so a report is
  *                                                                 never sent twice when both check at once
  */
 (function (root) {
@@ -74,12 +75,26 @@
         done(true);
       };
     });
+    /**
+     * Extend a lease this owner still holds: true only when the record exists and is this owner's, expired or not.
+     * A lease that someone else took, or that was taken and released meanwhile (unlock deletes it), is lost: false.
+     */
+    const renew = (name, owner, ttlMs, now = Date.now()) => tx('readwrite', (s, done) => {
+      const key = 'lock:' + name;
+      const r = s.get(key);
+      r.onsuccess = () => {
+        const cur = r.result;
+        if (!cur || typeof cur !== 'object' || cur.owner !== owner) { done(false); return; }
+        s.put({ owner, until: now + ttlMs }, key);
+        done(true);
+      };
+    });
     const unlock = (name, owner) => tx('readwrite', s => {
       const key = 'lock:' + name;
       const r = s.get(key);
       r.onsuccess = () => { if (r.result && r.result.owner === owner) s.delete(key); };
     });
-    return { get, set, del, update, lock, unlock };
+    return { get, set, del, update, lock, renew, unlock };
   }
 
   root.SgIdb = Object.assign(create(), { create, canLock, DB, STORE });

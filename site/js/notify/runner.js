@@ -111,9 +111,13 @@
         ...loaders(env),
         send: (req, ch) => send(env, req, ch),
         local: localNotifier(env),
-        persist: st => env.kv.set(KEYS.state, st), // after every channel: a closed tab mid-run never resends
-        beforeSend: () => env.kv.lock(LOCK, env.owner, LOCK_MS) // renew the lease (re-entrant for its owner)
+        // after every channel (a closed tab mid-run never resends), and only while this run still holds the lease:
+        // a run that lost it (frozen past the lease, another sender took over) never overwrites the newer state
+        persist: async st => { if (await env.kv.renew(LOCK, env.owner, LOCK_MS)) await env.kv.set(KEYS.state, st); },
+        // renew the lease before each send; false (it was lost, even if it is free again now) stops the run
+        beforeSend: () => env.kv.renew(LOCK, env.owner, LOCK_MS)
       });
+      if (res.reason === 'locked') return res; // the lease was lost: what was sent is already stored (persist)
       await env.kv.set(KEYS.state, res.state);
       if (res.sent && res.state.lastReport) await env.kv.set(KEYS.lastReport, res.state.lastReport);
       return res;

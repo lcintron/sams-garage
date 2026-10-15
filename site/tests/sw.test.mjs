@@ -435,14 +435,55 @@ test('idb lock: the holder renews its lease; others wait for it to expire', asyn
   assert.ok(run.LOCK_MS >= 90000, 'covers loading the data (2 x 30 s) before the first renewal');
 });
 
+test('idb renew: only a lease this owner still holds (expired or not); a lease taken and released meanwhile is lost', async () => {
+  const sw = loadSW({ net: () => ok('x') });
+  const kv = sw.ctx.SgIdb;
+  assert.equal(await kv.renew('r', 'page:a', 1000, 0), false, 'nothing to renew');
+  assert.equal(await kv.lock('r', 'page:a', 1000, 0), true);
+  assert.equal(await kv.renew('r', 'page:a', 1000, 5000), true, 'expired but still ours: renewed');
+  assert.equal(await kv.lock('r', 'sw:b', 1000, 7000), true, 'expired again: b takes it');
+  assert.equal(await kv.renew('r', 'page:a', 1000, 7100), false, 'taken by b');
+  await kv.unlock('r', 'sw:b');
+  assert.equal(await kv.renew('r', 'page:a', 1000, 7200), false, 'free again, but a run happened in between');
+  assert.equal(await kv.lock('r', 'page:a', 1000, 7200), true, 'lock (not renew) is how a new run starts');
+});
+
+test('notify: a runner frozen past its lease stops, sends nothing and leaves the newer state alone', async () => {
+  const live = liveNet();
+  let releaseA;
+  const gate = new Promise(r => { releaseA = r; });
+  let frozen = true;
+  // runner A freezes while loading the catalog
+  const net = async (url, req) => { if (frozen && url.endsWith('data/catalog.json') && req.headers.get('x-runner') === 'A') await gate; return live.net(url, req); };
+  const sw = loadSW({ net, permission: 'granted' });
+  const kv = await seed(sw);
+  const fetchAs = who => (u, i) => sw.ctx.fetch(u, { ...i, headers: { 'x-runner': who } });
+  const a = sw.ctx.SgNotifyRunner.run({ kv, base: LIVE, owner: 'page:A', fetch: fetchAs('A') });
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal((await kv.get('lock:notify')).owner, 'page:A');
+  await kv.set('lock:notify', { owner: 'page:A', until: 0 }); // A's lease expires while it is frozen
+  const b = await sw.ctx.SgNotifyRunner.run({ kv, base: LIVE, owner: 'sw:B', fetch: fetchAs('B') });
+  assert.equal(b.reason, 'sent');
+  assert.equal(live.posts.length, 1, 'B sent the report and released the lock');
+  const stateAfterB = JSON.stringify(await kv.get('notify-state'));
+  frozen = false;
+  releaseA();
+  const ra = await a;
+  assert.equal(ra.reason, 'locked', "A's beforeSend failed although the lock is free now");
+  assert.equal(live.posts.length, 1, 'A sent nothing');
+  assert.equal(JSON.stringify(await kv.get('notify-state')), stateAfterB, "A did not overwrite B's state");
+  assert.equal(await kv.get('lock:notify'), undefined, 'and left no lock behind');
+});
+
 test('notify: the runner renews its lease before each send, and a stalled data fetch times out', async () => {
   const live = liveNet();
   const sw = loadSW({ net: live.net, permission: 'granted' });
   const kv = await seed(sw);
   const leases = [];
-  const spy = { ...kv, lock: (n, o, ms) => { leases.push(o); return kv.lock(n, o, ms); } };
+  const spy = { ...kv, lock: (n, o, ms) => { leases.push('lock ' + o); return kv.lock(n, o, ms); }, renew: (n, o, ms) => { leases.push('renew ' + o); return kv.renew(n, o, ms); } };
   await sw.ctx.SgNotifyRunner.run({ kv: spy, base: LIVE, owner: 'page:x', fetch: (u, i) => sw.ctx.fetch(u, i), notify: async () => {} });
-  assert.deepEqual(leases, ['page:x', 'page:x', 'page:x'], 'taken once, renewed before Discord and before the device notification');
+  // taken once; renewed before Discord, before storing its result, before the device notification and before storing that
+  assert.deepEqual(leases, ['lock page:x', 'renew page:x', 'renew page:x', 'renew page:x', 'renew page:x']);
   const stall = loadSW({ net: (url, req) => new Promise((_, reject) => req.signal.addEventListener('abort', () => reject(new Error('aborted')))) });
   const kv2 = await seed(stall);
   const t0 = Date.now();
