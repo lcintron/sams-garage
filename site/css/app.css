@@ -21,6 +21,8 @@
   --st-closed: #8d9aad;
   --new: #e4572e;
   --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  --scroll-thumb: #2e3b4c;
+  --scroll-thumb-hover: #3f5064;
   --radius: 8px;
   --topbar-h: 52px;
   --panel-w: 264px;
@@ -35,7 +37,7 @@
     --text: #111a24; --text-dim: #4f5d6e; --accent: #0b7f78; --accent-strong: #096b65; --accent-ink: #ffffff;
     --accent-soft: rgba(11, 127, 120, .10); --link: #0a6f69; --warn: #8a5a00; --danger: #c62828;
     --st-open: #157a4a; --st-pre: #3459c4; --st-fc: #8a5a00; --st-closed: #5d6b7c; --new: #c2410c;
-    --shadow: 0 8px 28px rgba(15, 30, 50, .18); color-scheme: light;
+    --shadow: 0 8px 28px rgba(15, 30, 50, .18); --scroll-thumb: #c4ccd6; --scroll-thumb-hover: #a5b0bd; color-scheme: light;
   }
 }
 :root[data-theme="light"] {
@@ -43,10 +45,16 @@
   --text: #111a24; --text-dim: #4f5d6e; --accent: #0b7f78; --accent-strong: #096b65; --accent-ink: #ffffff;
   --accent-soft: rgba(11, 127, 120, .10); --link: #0a6f69; --warn: #8a5a00; --danger: #c62828;
   --st-open: #157a4a; --st-pre: #3459c4; --st-fc: #8a5a00; --st-closed: #5d6b7c; --new: #c2410c;
-  --shadow: 0 8px 28px rgba(15, 30, 50, .18); color-scheme: light;
+  --shadow: 0 8px 28px rgba(15, 30, 50, .18); --scroll-thumb: #c4ccd6; --scroll-thumb-hover: #a5b0bd; color-scheme: light;
 }
 
 * { box-sizing: border-box; }
+/* thin scrollbars in the theme's colors (the standard properties; ::-webkit-scrollbar for Safari and older Chrome) */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid transparent; border-radius: 6px; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-hover); }
 html, body { height: 100%; margin: 0; }
 body { font-family: var(--font); font-size: 13px; line-height: 1.45; color: var(--text); background: var(--bg); overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
