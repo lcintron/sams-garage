@@ -18,7 +18,8 @@
 import * as store from './store.js';
 import { parseQuery, toQuery, splitHash, buildHash, defaultState, isFiltered } from './filters.js';
 import {
-  WIDE_MIN, parseRoute, viewOf, keepsState, activeNav, showsFilters, isSecondary, homeHref, watchHref, viewTitle, themeChoice
+  WIDE_MIN, parseRoute, viewOf, keepsState, activeNav, showsFilters, isSecondary, homeHref, watchHref, viewTitle, themeChoice,
+  panelCollapsedPref, withPanelCollapsed
 } from './nav.js';
 import { allProfiles } from './profiles.js';
 import {
@@ -74,7 +75,7 @@ const app = {
 const el = {
   main: $('#main'), q: $('#q'), list: $('#list'), detail: $('#detail'), count: $('#resultCount'), chips: $('#activeChips'),
   sort: $('#sortSel'), filters: $('#filters'), filtersBody: $('#filtersBody'), filtersCount: $('#filtersCount'),
-  menuBtn: $('#menuBtn'), menuBadge: $('#menuBadge'), panel: $('#sidepanel'), panelScroll: $('#panelScroll'), showResults: $('#showResults'),
+  menuBtn: $('#menuBtn'), menuBadge: $('#menuBadge'), panel: $('#sidepanel'), showResults: $('#showResults'),
   freshness: $('#freshness'), listTitle: $('#listTitle'), indexState: $('#indexState'),
   watchBadge: $('#watchBadge'), watchCount: $('#navWatchCount'), scrim: $('#scrim'),
   installBtn: $('#installBtn'), exportBtn: $('#exportBtn'), exportMenu: $('#exportMenu'),
@@ -700,7 +701,7 @@ function closeDrawer({ restoreFocus = true } = {}) {
 function toggleMenu() {
   if (WIDE.matches) {
     const collapsed = document.documentElement.classList.toggle('panel-collapsed');
-    store.setPref('panelCollapsed', collapsed);
+    store.set('prefs', withPanelCollapsed(store.prefs(), collapsed));
     syncPanelMode();
   } else if (panelOpen()) {
     closeDrawer();
@@ -735,6 +736,8 @@ function exportResults(kind) {
 function setupUi() {
   initSort(el.sort, v => setState({ sort: v }));
   syncThemeUi();
+  // the stored preference decides (index.html applies the same rule before the first paint)
+  document.documentElement.classList.toggle('panel-collapsed', panelCollapsedPref(store.prefs()));
   syncPanelMode();
   $('#appVersion').textContent = ' · v' + APP_VERSION;
 

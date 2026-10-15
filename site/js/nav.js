@@ -10,11 +10,8 @@
  */
 import { buildHash } from './filters.js';
 
-/** At this width and above the side panel is a docked column; below it, an overlay drawer. */
+/** At this width and above the side panel is a docked column; below it, an overlay drawer (css/app.css, app.js). */
 export const WIDE_MIN = 1280;
-
-/** @returns {'docked'|'overlay'} */
-export const panelMode = width => (width >= WIDE_MIN ? 'docked' : 'overlay');
 
 /** The views other than the list, with their titles. */
 export const VIEWS = { sql: 'SQL console', notify: 'Notifications', settings: 'Settings', about: 'About' };
@@ -71,6 +68,12 @@ export const viewTitle = name => (Object.hasOwn(VIEWS, name) ? VIEWS[name] : 'Op
  * filters; it is read when panelCollapsed has never been set.
  */
 export const panelCollapsedPref = p => (p && typeof p.panelCollapsed === 'boolean' ? p.panelCollapsed : !!(p && p.filtersCollapsed));
+
+/** The preferences with the panel collapsed or not; the old filtersCollapsed goes the first time it is written. */
+export function withPanelCollapsed(p, collapsed) {
+  const { filtersCollapsed: _old, ...rest } = p && typeof p === 'object' ? p : {};
+  return { ...rest, panelCollapsed: !!collapsed };
+}
 
 /** The theme choice in the preferences: 'light', 'dark' or 'system' (no choice saved: follow the system). */
 export const themeChoice = p => (p && (p.theme === 'light' || p.theme === 'dark') ? p.theme : 'system');

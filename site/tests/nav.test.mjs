@@ -4,24 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  WIDE_MIN, panelMode, parseRoute, viewOf, keepsState, activeNav, showsFilters, isSecondary, homeHref, watchHref,
-  viewTitle, panelCollapsedPref, themeChoice
+  WIDE_MIN, parseRoute, viewOf, keepsState, activeNav, showsFilters, isSecondary, homeHref, watchHref,
+  viewTitle, panelCollapsedPref, withPanelCollapsed, themeChoice
 } from '../js/nav.js';
 import { defaultState, parseQuery, splitHash } from '../js/filters.js';
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(site, f), 'utf8');
 
-test('panel mode: docked from 1280 px, an overlay drawer below', () => {
+test('the panel docks from WIDE_MIN (1280 px); the CSS and app.js use that breakpoint', () => {
   assert.equal(WIDE_MIN, 1280);
-  assert.equal(panelMode(1280), 'docked');
-  assert.equal(panelMode(1920), 'docked');
-  assert.equal(panelMode(1279), 'overlay');
-  assert.equal(panelMode(1100), 'overlay');
-  assert.equal(panelMode(375), 'overlay');
-});
-
-test('the CSS and app.js breakpoints match WIDE_MIN', () => {
   const css = read('css/app.css');
   assert.ok(css.includes(`@media (min-width: ${WIDE_MIN}px)`), 'docked rules');
   assert.ok(css.includes(`@media (max-width: ${WIDE_MIN - 1}px)`), 'drawer rules');
@@ -61,7 +53,7 @@ test('every panel item in index.html is one activeNav names, and the home item k
   for (const v of ['sql', 'notify', 'settings', 'about']) {
     assert.ok(html.includes(`id="${v}View"`) && html.includes(`id="${v}Body"`), v + ' view and body');
   }
-  assert.equal((html.match(/class="btn small ghost back-home"/g) || []).length, 5, 'a back link on the watchlist and on each view');
+  assert.equal((html.match(/class="[^"]*back-home[^"]*"/g) || []).length, 5, 'a back link on the watchlist and on each view');
   assert.ok(!/brand-short/.test(html) && !/brand-short/.test(read('css/app.css')), 'no "Sg" next to the logo');
   assert.match(html, /id="menuBtn"[^>]*aria-controls="sidepanel"[^>]*aria-expanded/);
 });
@@ -126,6 +118,10 @@ test('the collapsed-panel preference reads its old name', () => {
   assert.equal(panelCollapsedPref({ filtersCollapsed: true }), true, 'the old preference');
   assert.equal(panelCollapsedPref({ filtersCollapsed: true, panelCollapsed: false }), false, 'the new one wins');
   assert.equal(panelCollapsedPref({ filtersCollapsed: false, panelCollapsed: true }), true);
+  assert.deepEqual(withPanelCollapsed({ theme: 'dark', filtersCollapsed: true }, false), { theme: 'dark', panelCollapsed: false }, 'the old key goes');
+  assert.deepEqual(withPanelCollapsed({ panelCollapsed: false }, true), { panelCollapsed: true });
+  assert.deepEqual(withPanelCollapsed(null, true), { panelCollapsed: true });
+  assert.equal(panelCollapsedPref(withPanelCollapsed({ filtersCollapsed: true }, false)), false);
   // index.html applies it before the first paint with the same rule
   assert.match(read('index.html'), /typeof p\.panelCollapsed === 'boolean' \? p\.panelCollapsed : p\.filtersCollapsed/);
 });

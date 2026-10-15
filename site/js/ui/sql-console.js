@@ -8,7 +8,7 @@ let state = null; // { db, schema } once loaded
 let loading = null;
 
 /**
- * @param {HTMLElement} view   #sqlView
+ * @param {HTMLElement} view   #sqlBody (the view's body, under its header)
  * @param {{ url: string, version: string }} opts
  */
 export async function showSqlConsole(view, opts) {
