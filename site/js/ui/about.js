@@ -58,8 +58,8 @@ export function renderAbout(view, o) {
 
     h('h2', { text: 'This device' }),
     h('div', { class: 'row' }, h('label', null, 'Theme ', themeSel),
-      h('button', { class: 'btn small danger', type: 'button', text: 'Clear watchlist, profiles and saved searches', onclick: o.onClearLocal })),
-    h('p', { class: 'small dim', text: 'Watchlist, saved searches, profiles and preferences are stored only in this browser.' }),
+      h('button', { class: 'btn small danger', type: 'button', text: 'Clear watchlist, profiles, saved searches and notification settings', onclick: o.onClearLocal })),
+    h('p', { class: 'small dim', text: 'Watchlist, saved searches, profiles, preferences and notification settings (with their webhooks and keys) are stored only on this device.' }),
 
     h('h2', { text: 'Open source' }),
     h('p', null, 'MIT licensed; source on ', h('a', { href: 'https://github.com/lcintron/sams-garage', target: '_blank', rel: 'noopener noreferrer', text: 'GitHub' }), '. Bundled: ', h('a', { href: 'vendor/minisearch/LICENSE.txt', text: 'MiniSearch' }), ' (MIT) and ',

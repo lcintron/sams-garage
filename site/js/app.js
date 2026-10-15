@@ -9,6 +9,7 @@
  *   2. meta.json (network-first) in parallel -> freshness pill; refetch data if data_version changed
  *   3. when idle: search-index.json + MiniSearch -> full-text search and description-aware profile scores
  *   4. sql.js + solicitations.sqlite only when #/sql is opened
+ *   5. after that: the notification code (js/notify/page.js) - the due check, mirroring the watchlist, the periodic sync
  */
 import * as store from './store.js';
 import { parseQuery, toQuery, splitHash, buildHash, defaultState, isFiltered } from './filters.js';
@@ -27,9 +28,11 @@ import { renderDetail, renderMissing } from './ui/detail.js';
 import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
-import * as notify from './notify/page.js';
 
 const APP_VERSION = '0.3.0'; // app version; bump via scripts/release.js
+// The notification code loads after the first paint (startNotifications), or at once when #/notify is opened first.
+let notifyP = null;
+const loadNotify = () => (notifyP = notifyP || import('./notify/page.js'));
 const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
 const WIDE = window.matchMedia('(min-width: 1280px)');   // filters as a column (else a drawer)
 const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side by side (else detail full-screen)
@@ -331,9 +334,10 @@ function renderAboutView() {
     theme: store.prefs().theme || 'system',
     catalogCount: app.catalog.length,
     onTheme: t => setTheme(t === 'system' ? null : t),
-    onClearLocal: () => {
-      if (!confirm('Clear your watchlist, saved searches, keyword profiles and preferences on this device?')) return;
+    onClearLocal: async () => {
+      if (!confirm('Clear your watchlist, saved searches, keyword profiles, preferences and notification settings (channels, webhooks and keys) on this device?')) return;
       for (const k of ['watchlist', 'searches', 'profiles', 'prefs', 'lastVisit']) store.remove(k);
+      try { await (await loadNotify()).reset(); } catch (err) { console.warn('[sg] notification settings not cleared', err); }
       location.reload();
     }
   }));
@@ -409,7 +413,20 @@ async function loadAll() {
   renderFreshness(el.freshness, meta, app.offline);
   app.lastMetaCheck = Date.now();
   if (meta) await checkVersion(meta);
-  notify.check(); // the daily report, when it is due and this browser sends it (the desktop app sends on its own)
+}
+
+/**
+ * After the first paint: the notification code. It mirrors the watchlist and profiles to where the background
+ * report reads them, runs the due check (web; the desktop app sends on its own), keeps the Periodic Background Sync in
+ * line with the settings, and opens a view the desktop app asks for (a click on the report notification).
+ */
+function startNotifications() {
+  loadNotify().then(n => {
+    n.startMirroring();
+    n.onDesktopNavigate(hash => { if (/^#\/[a-z]/.test(hash)) location.hash = hash; });
+    n.check();
+    n.load().then(r => n.syncPeriodic(r.settings)).catch(() => {});
+  }).catch(err => console.warn('[sg] notifications not loaded', err));
 }
 
 /** The published data is newer than this version reads: no list, a notice and a way to update. */
@@ -670,7 +687,7 @@ function setupUi() {
   // last visit: stored when the app is hidden or closed, never on load
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') store.markVisit();
-    else { recheckMeta(); notify.check(); }
+    else { recheckMeta(); if (notifyP) notifyP.then(n => n.check()).catch(() => {}); }
   });
   window.addEventListener('pagehide', () => store.markVisit());
 
@@ -708,8 +725,6 @@ function setupPwa() {
   sw.register('sw.js').then(reg => {
     // a worker waiting from an older tab: let it take over (it calls skipWaiting itself, this is belt and braces)
     if (reg.waiting && hadController) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-    // the daily report's Periodic Background Sync follows the saved settings
-    notify.load().then(r => notify.syncPeriodic(r.settings)).catch(() => {});
   }).catch(err => console.warn('Service worker not registered', err));
   // a click on the report notification, when the open page is not controlled by the worker
   sw.addEventListener('message', e => {
@@ -722,7 +737,5 @@ function setupPwa() {
 
 setupUi();
 setupPwa();
-notify.startMirroring(); // the watchlist and profiles, where the background report reads them
-notify.onDesktopNavigate(hash => { if (/^#\/[a-z]/.test(hash)) location.hash = hash; });
 el.q.value = parseQuery(splitHash(location.hash).query).q;
-loadAll();
+loadAll().catch(() => {}).finally(startNotifications);
