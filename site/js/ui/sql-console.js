@@ -94,7 +94,7 @@ function build(view, sqlMod, opts) {
 
   view.replaceChildren(h('div', { class: 'sql' }, schemaEl,
     h('div', { class: 'sql-main' },
-      h('div', { class: 'sql-bar' }, h('h1', { class: 'list-title', text: 'SQL console' }), h('span', { class: 'grow' }), examples,
+      h('div', { class: 'sql-bar' }, examples, h('span', { class: 'grow' }),
         h('button', { class: 'btn small primary', type: 'button', title: 'Run (Ctrl+Enter)', text: 'Run ▸', onclick: run })),
       ta, msg, out)));
   run();

@@ -9,9 +9,9 @@
  *   (the rules and the version arithmetic are in scripts/semver.js)
  * - --ci: non-interactive mode for GitHub Actions: first brings the branch up to date with the remote (the daily
  *   data commits land on main too), and writes released/tag/version to $GITHUB_OUTPUT
- * - Writes the new version everywhere it is shown: package.json, site/js/app.js (APP_VERSION, shown in the About
- *   view), site/sw.js (the cache name) and scraper/__init__.py (the data bot's User-Agent); the README shows the
- *   latest release with a badge
+ * - Writes the new version everywhere it is shown: package.json, site/js/app.js (APP_VERSION, shown in About,
+ *   Settings and the side panel), site/sw.js (the cache name) and scraper/__init__.py (the data bot's User-Agent);
+ *   the README shows the latest release with a badge
  * - Commits "chore(release): vX.Y.Z", tags vX.Y.Z and pushes both at once (git push --atomic: the branch and the
  *   tag land together or not at all). If the branch moved meanwhile, --ci rebases once and retries; otherwise it
  *   stops and says to re-run. The GitHub "Release" workflow, which runs this script when started by hand, then

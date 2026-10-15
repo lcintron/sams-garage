@@ -18,7 +18,8 @@ export function renderCount(el, shown, total, mode) {
 }
 
 /**
- * Active filter chips; each removes its filter. A "Clear all" chip resets to defaults (keeping sort).
+ * Active filter chips; each removes its filter. A "Clear all" chip resets to defaults (keeping sort). Returns how
+ * many filters are active.
  * @param {(patch)=>void} onChange
  */
 export function renderActiveChips(el, s, profilesById, onChange) {
@@ -39,9 +40,10 @@ export function renderActiveChips(el, s, profilesById, onChange) {
   if (s.closing) add(`Closes ≤ ${s.closing} d`, { closing: null });
   if (s.opens) add(`Opens ≥ ${fmtDate(s.opens)}`, { opens: '' });
   if (s.newOnly) add('New only', { newOnly: false });
-  if (chips.length > 1) chips.push(h('button', { class: 'chip clear-all', type: 'button', onclick: () => onChange({ ...d, sort: s.sort }), text: 'Clear all' }));
+  const n = chips.length;
+  if (n > 1) chips.push(h('button', { class: 'chip clear-all', type: 'button', onclick: () => onChange({ ...d, sort: s.sort }), text: 'Clear all' }));
   el.replaceChildren(...chips);
-  return chips.length;
+  return n; // the active filters (not counting "Clear all")
 }
 
 /** Header pill: "Updated 3h ago"; warns when a source failed or data is older than 2 days; marks dev fixtures. */

@@ -65,7 +65,7 @@ export async function showNotifyView(view, o) {
     try {
       Object.assign(ui, await page.load(), { editing: null, draft: null, preview: undefined });
     } catch (e) {
-      view.replaceChildren(h('div', { class: 'notify' }, h('h1', { text: 'Notifications' }),
+      view.replaceChildren(h('div', { class: 'notify' },
         h('p', { class: 'notice', text: 'Notification settings cannot be stored in this browser (' + e.message + '). Private windows often block it.' })));
       ui.settings = null;
       return;
@@ -150,8 +150,7 @@ function render() {
   if (!ui || !ui.settings) return;
   const s = ui.settings;
   const focusId = document.activeElement && ui.view.contains(document.activeElement) ? document.activeElement.id : null;
-  ui.view.replaceChildren(h('div', { class: 'notify' },
-    h('h1', { text: 'Notifications' }),
+  ui.view.replaceChildren(h('div', { class: 'notify' }, // the title is in the view's header (index.html)
     h('p', null, 'One report a day, and only when there is something to report: new topics that match your keywords, ',
       'changes to matching topics, and any change to the topics you starred. It goes to Slack, Discord, Microsoft Teams or WhatsApp. ',
       h('a', { href: README, target: '_blank', rel: 'noopener noreferrer', text: 'Setup guide' }), '.'),
