@@ -1,8 +1,12 @@
 /*
  * SAM's Garage — boot, routing and glue.
  *
- * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/notify notifications · #/about
- * Filters live in the hash query (#/?q=uas&agency=DOD) so every view is shareable (filters.js).
+ * Routes (hash): #/ list · #/s/<id> detail · #/watch watchlist · #/sql SQL console · #/notify notifications ·
+ * #/settings · #/about (js/nav.js). Filters live in the hash query of the list routes (#/?q=uas&agency=DOD) so every
+ * view is shareable (filters.js); the other views leave them as they were, and their "← Opportunities" goes back to them.
+ *
+ * The menu button opens the side panel: navigation, the filters (on the list of all topics) and a footer with the
+ * theme, Settings and About. From 1280 px it is a docked column the button collapses; below, a modal drawer.
  *
  * Start-up order, so first paint never waits on anything heavy:
  *   1. catalog.json (stale-while-revalidate in the SW) -> render the list
@@ -13,6 +17,10 @@
  */
 import * as store from './store.js';
 import { parseQuery, toQuery, splitHash, buildHash, defaultState, isFiltered } from './filters.js';
+import {
+  WIDE_MIN, parseRoute, viewOf, keepsState, activeNav, showsFilters, isSecondary, homeHref, watchHref, viewTitle, themeChoice,
+  panelCollapsedPref, withPanelCollapsed
+} from './nav.js';
 import { allProfiles } from './profiles.js';
 import {
   buildIndex, textSearch, fallbackSearch, runPipeline, facetCounts, computeProfileScores, todayISO
@@ -34,7 +42,7 @@ const APP_VERSION = '0.3.0'; // app version; bump via scripts/release.js
 let notifyP = null;
 const loadNotify = () => (notifyP = notifyP || import('./notify/page.js'));
 const DESKTOP = window.sgDesktop || null; // the Electron app's bridge (electron/preload.js)
-const WIDE = window.matchMedia('(min-width: 1280px)');   // filters as a column (else a drawer)
+const WIDE = window.matchMedia(`(min-width: ${WIDE_MIN}px)`); // the side panel docked as a column (else a drawer)
 const SPLIT = window.matchMedia('(min-width: 1024px)');  // list and detail side by side (else detail full-screen)
 
 const app = {
@@ -59,16 +67,25 @@ const app = {
   rendered: false,
   offline: !navigator.onLine,
   metaReady: null,
-  lastMetaCheck: 0
+  lastMetaCheck: 0,
+  installPrompt: null        // the browser's install offer (beforeinstallprompt), while it stands
 };
 
 // ---------- elements ----------
 const el = {
   main: $('#main'), q: $('#q'), list: $('#list'), detail: $('#detail'), count: $('#resultCount'), chips: $('#activeChips'),
-  sort: $('#sortSel'), filtersBody: $('#filtersBody'), filtersBtn: $('#filtersBtn'), filtersBadge: $('#filtersBadge'),
-  freshness: $('#freshness'), sqlView: $('#sqlView'), aboutView: $('#aboutView'), notifyView: $('#notifyView'), listTitle: $('#listTitle'),
-  indexState: $('#indexState'), watchBadge: $('#watchBadge'), scrim: $('#scrim'), themeBtn: $('#themeBtn'),
-  installBtn: $('#installBtn'), exportBtn: $('#exportBtn'), exportMenu: $('#exportMenu')
+  sort: $('#sortSel'), filters: $('#filters'), filtersBody: $('#filtersBody'), filtersCount: $('#filtersCount'),
+  menuBtn: $('#menuBtn'), menuBadge: $('#menuBadge'), panel: $('#sidepanel'), showResults: $('#showResults'),
+  freshness: $('#freshness'), listTitle: $('#listTitle'), indexState: $('#indexState'),
+  watchBadge: $('#watchBadge'), watchCount: $('#navWatchCount'), scrim: $('#scrim'),
+  installBtn: $('#installBtn'), exportBtn: $('#exportBtn'), exportMenu: $('#exportMenu'),
+  // each view: its section (header + body) and the body its module renders into
+  views: {
+    sql: { section: $('#sqlView'), body: $('#sqlBody') },
+    notify: { section: $('#notifyView'), body: $('#notifyBody') },
+    settings: { section: $('#settingsView'), body: $('#settingsBody') },
+    about: { section: $('#aboutView'), body: $('#aboutBody') }
+  }
 };
 const detailEmptyTemplate = el.detail.firstElementChild.cloneNode(true);
 
@@ -95,14 +112,24 @@ const panel = createFiltersPanel(el.filtersBody, {
 /** Apply a filter patch, write it to the URL (replaceState: filter tweaks do not flood history), re-render. */
 function setState(patch, { keepScroll = false } = {}) {
   app.state = parseQuery(toQuery({ ...app.state, ...patch })); // normalize through the URL format
+  // a search typed on another view (the search box is in the header) shows its results: the list, as a new page
+  if (viewOf(app.route) !== 'list') { location.hash = homeHref(app.state); return; }
   const path = app.route.name === 'detail' ? '/s/' + encodeId(app.route.id) : app.listMode === 'watch' ? '/watch' : '/';
   const hash = buildHash(path, app.state);
   if (location.hash !== hash) history.replaceState(null, '', hash);
   if (el.q.value.trim() !== app.state.q) el.q.value = app.state.q;
+  syncNav();
   refresh({ keepScroll });
 }
 
-function backHref() { return buildHash(app.listMode === 'watch' ? '/watch' : '/', app.state); }
+/** A state change on a view other than the list: kept for the way back (the back links), without leaving the view. */
+function keepState(patch) {
+  app.state = parseQuery(toQuery({ ...app.state, ...patch }));
+  syncNav();
+}
+
+/** Where a detail's Back (and Esc) goes: the list it was opened from. */
+function backHref() { return app.listMode === 'watch' ? watchHref(app.state) : homeHref(app.state); }
 
 // ---------- compute + render ----------
 
@@ -122,6 +149,9 @@ function ctx() {
   };
 }
 
+/** The watchlist's state: the search and the sort; every status, no filters. */
+const watchState = () => ({ ...defaultState(), status: [], q: app.state.q, sort: app.state.sort });
+
 /** Recompute results and re-render list, counts, chips and the filter panel. */
 function refresh({ keepScroll = false } = {}) {
   if (!app.loaded) return;
@@ -130,8 +160,9 @@ function refresh({ keepScroll = false } = {}) {
   const watch = store.watchlist();
   let total;
   if (app.listMode === 'watch') {
+    // the starred topics, searched by the search box; the filters do not apply to them
     const recs = app.catalog.filter(r => watch.has(r.id));
-    app.results = runPipeline(recs, { ...defaultState(), status: [], sort: app.state.sort }, { ...c, textScores: null });
+    app.results = runPipeline(recs, watchState(), c);
     total = recs.length;
   } else {
     app.results = runPipeline(app.catalog, app.state, c);
@@ -140,13 +171,14 @@ function refresh({ keepScroll = false } = {}) {
 
   el.sort.value = app.state.sort;
   renderCount(el.count, app.results.length, total, app.listMode);
-  const nChips = app.listMode === 'watch' ? (el.chips.replaceChildren(), 0) : renderActiveChips(el.chips, app.state, app.profilesById, p => setState(p));
-  el.filtersBadge.textContent = String(nChips);
-  el.filtersBadge.classList.toggle('hidden', !nChips || app.listMode === 'watch');
+  // on the watchlist, only the search has a chip
+  const chipState = app.listMode === 'watch' ? { ...defaultState(), q: app.state.q, sort: app.state.sort } : app.state;
+  const nChips = renderActiveChips(el.chips, chipState, app.profilesById, p => setState(p));
+  showFilterCount(app.listMode === 'watch' ? 0 : nChips); // the filters are not used on the watchlist
+  el.showResults.textContent = app.results.length === 1 ? 'Show 1 result' : `Show ${app.results.length.toLocaleString()} results`;
   el.listTitle.textContent = app.listMode === 'watch' ? 'Watchlist' : 'Opportunities';
   if (app.route.name === 'list') setListTitle();
   el.main.classList.toggle('mode-watch', app.listMode === 'watch');
-  el.filtersBtn.disabled = app.listMode === 'watch';
   updateWatchBadge(watch);
 
   list.render(app.results, {
@@ -177,7 +209,37 @@ function setListTitle() {
   document.title = (app.listMode === 'watch' ? 'Watchlist' : app.state.q ? `“${app.state.q}”` : 'Open topics') + " · SAM's Garage";
 }
 
+/** The number of active filters: on the menu button (it opens them) and beside the Filters heading. */
+function showFilterCount(n) {
+  for (const b of [el.menuBadge, el.filtersCount]) {
+    b.textContent = String(n);
+    b.classList.toggle('hidden', !n);
+  }
+  el.filtersCount.title = n === 1 ? '1 active filter' : `${n} active filters`;
+  el.menuBtn.setAttribute('aria-label', n ? `Menu (${n} active ${n === 1 ? 'filter' : 'filters'})` : 'Menu');
+}
+
+/**
+ * The navigation in step with the route and the filters: the current panel item, the header star, the links that
+ * keep the filters (home, the back links, the watchlist), and the filters section (only on the list of all topics).
+ */
+function syncNav() {
+  const cur = activeNav(app.route, app.listMode);
+  for (const a of document.querySelectorAll('#sidepanel [data-nav], #watchBtn')) {
+    const on = (a.dataset.nav || 'watch') === cur;
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  }
+  const home = homeHref(app.state), watch = watchHref(app.state);
+  for (const a of document.querySelectorAll('#navHome, .back-home')) a.setAttribute('href', home);
+  for (const a of document.querySelectorAll('#navWatch, #watchBtn')) a.setAttribute('href', watch);
+  el.filters.classList.toggle('hidden', !showsFilters(app.route, app.listMode));
+}
+
 function emptyState() {
+  if (app.listMode === 'watch' && app.state.q && store.watchlist().size) {
+    return h('div', { class: 'empty' }, h('p', { text: `No starred topics match “${app.state.q}”.` }),
+      h('button', { class: 'btn small', type: 'button', text: 'Clear the search', onclick: () => setState({ q: '' }) }));
+  }
   if (app.listMode === 'watch') {
     return h('div', { class: 'empty' }, h('p', { text: 'No starred topics yet.' }),
       h('p', { class: 'small', text: 'Use the ☆ on any topic to keep it here.' }), h('a', { class: 'btn small', href: '#/', text: 'Browse topics' }));
@@ -191,6 +253,8 @@ function updateWatchBadge(watch = store.watchlist()) {
   const n = app.loaded ? app.catalog.reduce((k, r) => k + (watch.has(r.id) ? 1 : 0), 0) : watch.size;
   el.watchBadge.textContent = String(n);
   el.watchBadge.classList.toggle('hidden', !n);
+  el.watchCount.textContent = n ? String(n) : '';
+  el.watchCount.title = n === 1 ? '1 starred topic' : `${n} starred topics`;
 }
 
 function toggleWatch(id) {
@@ -216,16 +280,7 @@ function followAlias(route = app.route) {
   }
 }
 
-function parseRoute(path) {
-  if (path === '/' || path === '') return { name: 'list', id: null, mode: 'all' };
-  if (path === '/watch') return { name: 'list', id: null, mode: 'watch' };
-  if (path === '/sql') return { name: 'sql' };
-  if (path === '/about') return { name: 'about' };
-  if (path === '/notify') return { name: 'notify' };
-  const m = path.match(/^\/s\/(.+)$/);
-  if (m) { try { return { name: 'detail', id: decodeURIComponent(m[1]) }; } catch { return { name: 'detail', id: m[1] }; } }
-  return null;
-}
+const VIEW_FOCUS = new Set(['settings', 'about', 'notify']);
 
 async function onHashChange() {
   const { path, query } = splitHash(location.hash);
@@ -234,7 +289,8 @@ async function onHashChange() {
 
   const prevRoute = app.route;
   const prevMode = app.listMode;
-  const stateChanged = toQuery(parseQuery(query)) !== toQuery(app.state);
+  // the list routes carry the filters in their query; the other views keep them as they were (their back links use them)
+  const stateChanged = keepsState(route) && toQuery(parseQuery(query)) !== toQuery(app.state);
   if (stateChanged) app.state = parseQuery(query);
   if (route.mode) app.listMode = route.mode;
   followAlias(route); // an old id in a link or bookmark: that record, under its id now
@@ -242,38 +298,32 @@ async function onHashChange() {
   if (el.q.value.trim() !== app.state.q && document.activeElement !== el.q) el.q.value = app.state.q;
 
   // view switching
-  const view = route.name === 'sql' || route.name === 'about' || route.name === 'notify' ? route.name : 'list';
+  const view = viewOf(route);
   el.main.dataset.view = view;
-  el.sqlView.classList.toggle('hidden', view !== 'sql');
-  el.aboutView.classList.toggle('hidden', view !== 'about');
-  el.notifyView.classList.toggle('hidden', view !== 'notify');
+  for (const [name, v] of Object.entries(el.views)) v.section.classList.toggle('hidden', name !== view);
   el.main.dataset.detail = route.name === 'detail' ? 'open' : 'closed';
-  for (const [a, on] of [['#navWatch', route.mode === 'watch' || (route.name === 'detail' && app.listMode === 'watch')], ['#navSql', view === 'sql'], ['#navNotify', view === 'notify'], ['#navAbout', view === 'about']]) {
-    const link = $(a);
-    if (on) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
-  }
-  closeDrawer();
+  syncNav();
+  // another page (Back, a link elsewhere): the drawer closes. A filter change or a saved search keeps it open.
+  if (activeNav(prevRoute, prevMode) !== activeNav(route, app.listMode) || viewOf(prevRoute) !== view) closeDrawer();
+  // entering a view: its title takes the focus (after closeDrawer, which would move it back to the menu button);
+  // the SQL console focuses its query box itself
+  if (view !== viewOf(prevRoute) && VIEW_FOCUS.has(view)) $('#' + view + 'Title').focus({ preventScroll: true });
 
-  if (view === 'sql') {
-    document.title = "SQL console · SAM's Garage";
-    await app.metaReady;
-    const { showSqlConsole } = await import('./ui/sql-console.js');
-    showSqlConsole(el.sqlView, { url: data.sqliteURL(app.version), version: app.version || 'none' });
-    return;
-  }
-  if (view === 'about') {
-    document.title = "About · SAM's Garage";
-    renderAboutView();
-    return;
-  }
-  if (view === 'notify') {
-    document.title = "Notifications · SAM's Garage";
-    renderNotifyView(new URLSearchParams(query).get('report') === 'last');
+  if (view !== 'list') {
+    document.title = viewTitle(view);
+    const body = el.views[view].body;
+    if (view === 'sql') {
+      await app.metaReady;
+      const { showSqlConsole } = await import('./ui/sql-console.js');
+      showSqlConsole(body, { url: data.sqliteURL(app.version), version: app.version || 'none' });
+    } else if (view === 'about') renderAboutView();
+    else if (view === 'settings') renderSettingsView();
+    else if (view === 'notify') renderNotifyView(new URLSearchParams(query).get('report') === 'last');
     return;
   }
 
   // list (+ detail)
-  const listChanged = !app.rendered || stateChanged || prevMode !== app.listMode || ['sql', 'about', 'notify'].includes(prevRoute.name);
+  const listChanged = !app.rendered || stateChanged || prevMode !== app.listMode || viewOf(prevRoute) !== 'list';
   if (listChanged) refresh();
   if (route.name === 'detail') {
     list.select(route.id);
@@ -328,31 +378,70 @@ async function showDetail(id, prevRoute) {
 }
 
 function renderAboutView() {
-  import('./ui/about.js').then(({ renderAbout }) => renderAbout(el.aboutView, {
+  import('./ui/about.js').then(({ renderAbout }) => renderAbout(el.views.about.body, {
     meta: app.meta,
     appVersion: APP_VERSION,
-    theme: store.prefs().theme || 'system',
-    catalogCount: app.catalog.length,
-    onTheme: t => setTheme(t === 'system' ? null : t),
-    onClearLocal: async () => {
-      if (!confirm('Clear your watchlist, saved searches, keyword profiles, preferences and notification settings (channels, webhooks and keys) on this device?')) return;
-      for (const k of ['watchlist', 'searches', 'profiles', 'prefs', 'lastVisit']) store.remove(k);
-      try { await (await loadNotify()).reset(); } catch (err) { console.warn('[sg] notification settings not cleared', err); }
-      location.reload();
-    }
+    catalogCount: app.catalog.length
   }));
 }
 
+/** Watchlist, saved searches, profiles, preferences and the notification settings (with the periodic sync) go. */
+async function clearLocalData() {
+  if (!confirm('Clear your watchlist, saved searches, keyword profiles, preferences and notification settings (channels, webhooks and keys) on this device?')) return;
+  for (const k of ['watchlist', 'searches', 'profiles', 'prefs', 'lastVisit']) store.remove(k);
+  try { await (await loadNotify()).reset(); } catch (err) { console.warn('[sg] notification settings not cleared', err); }
+  location.reload();
+}
+
+/** How the app can be installed here: the desktop app, already installed, the browser offers it, or neither. */
+function installState() {
+  if (DESKTOP) return 'desktop';
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) return 'installed';
+  return app.installPrompt ? 'available' : 'unavailable';
+}
+
+/**
+ * One line about the notifications, when their code is already loaded (it loads after the first paint); null
+ * otherwise: Settings never loads it just for this line.
+ */
+function notifySummary() {
+  if (!notifyP) return null;
+  return notifyP.then(n => n.load()).then(({ settings: s }) => {
+    const n = s.channels.filter(c => c.enabled).length;
+    if (!s.enabled) return 'Off';
+    return n ? `On · ${n} ${n === 1 ? 'channel' : 'channels'}` : 'On, but no channel is set up yet';
+  }).catch(() => null);
+}
+
+function renderSettingsView() {
+  if (app.route.name !== 'settings') return;
+  import('./ui/settings.js').then(({ renderSettings }) => renderSettings(el.views.settings.body, {
+    meta: app.meta,
+    offline: app.offline,
+    appVersion: APP_VERSION,
+    catalogCount: app.catalog.length,
+    theme: themeChoice(store.prefs()),
+    install: installState(),
+    onInstall: promptInstall,
+    notify: notifySummary(),
+    sqliteUrl: data.sqliteURL(app.version),
+    onClearLocal: clearLocalData
+  })).catch(err => {
+    el.views.settings.body.replaceChildren(h('div', { class: 'about' }, h('p', { text: 'Settings could not load: ' + err.message })));
+  });
+}
+
 function renderNotifyView(reportLast) {
-  import('./ui/notify-view.js').then(({ showNotifyView }) => showNotifyView(el.notifyView, {
+  import('./ui/notify-view.js').then(({ showNotifyView }) => showNotifyView(el.views.notify.body, {
     catalog: app.catalog,
     descriptions: app.descriptions,
     profiles: app.profiles,
     watchCount: app.loaded ? app.catalog.reduce((k, r) => k + (store.isWatched(r.id) ? 1 : 0), 0) : store.watchlist().size,
     reportLast,
-    toast
+    toast,
+    onManageProfiles: onChange => openProfilesDialog(store.userProfiles(), list => { saveUserProfiles(list); onChange(app.profiles); })
   })).catch(err => {
-    el.notifyView.replaceChildren(h('div', { class: 'about' }, h('p', { text: 'The notifications view could not load: ' + err.message })));
+    el.views.notify.body.replaceChildren(h('div', { class: 'about' }, h('p', { text: 'The notifications view could not load: ' + err.message })));
   });
 }
 
@@ -542,7 +631,10 @@ function saveUserProfiles(list) {
   app.profiles = allProfiles(list);
   recomputeProfileScores();
   const ids = new Set(app.profiles.map(p => p.id));
-  if (app.state.profile.some(id => !ids.has(id))) setState({ profile: app.state.profile.filter(id => ids.has(id)) });
+  const gone = app.state.profile.some(id => !ids.has(id));
+  const patch = { profile: app.state.profile.filter(id => ids.has(id)) };
+  if (gone && viewOf(app.route) !== 'list') keepState(patch); // the dialog was opened from Notifications: stay there
+  else if (gone) setState(patch);
   else refresh({ keepScroll: true });
 }
 
@@ -560,12 +652,13 @@ function setTheme(t) {
   syncThemeUi();
 }
 
+/** The theme picked here: 'light', 'dark' or 'system' (as applied to the page; saved in prefs.theme). */
+const currentTheme = () => themeChoice({ theme: document.documentElement.dataset.theme });
+
 function syncThemeUi() {
-  const cur = effectiveTheme();
-  const next = cur === 'dark' ? 'light' : 'dark';
-  el.themeBtn.title = `Switch to ${next} theme`;
-  el.themeBtn.setAttribute('aria-label', `Switch to ${next} theme`);
-  $('meta[name="theme-color"]').setAttribute('content', cur === 'dark' ? '#0b1118' : '#ffffff');
+  const choice = currentTheme();
+  for (const b of document.querySelectorAll('[data-theme-pick]')) b.setAttribute('aria-pressed', String(b.dataset.themePick === choice));
+  $('meta[name="theme-color"]').setAttribute('content', effectiveTheme() === 'dark' ? '#0b1118' : '#ffffff');
   // Desktop app: the window buttons drawn over the top bar take the bar's colors.
   if (DESKTOP && DESKTOP.setTitleBarColors) {
     const css = getComputedStyle(document.documentElement);
@@ -573,26 +666,55 @@ function syncThemeUi() {
   }
 }
 
+// ---------- side panel: a docked column (wide) or a modal drawer ----------
+
+const panelOpen = () => document.body.classList.contains('panel-open');
+const panelCollapsed = () => document.documentElement.classList.contains('panel-collapsed');
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const focusables = root => [...root.querySelectorAll(FOCUSABLE)].filter(x => x.getClientRects().length);
+
+/**
+ * The panel's semantics for the width: a modal dialog (role, aria-modal, inert while closed) in the drawer, plain
+ * landmarks when docked (inert only while collapsed); the menu button's aria-expanded either way.
+ */
+function syncPanelMode() {
+  const overlay = !WIDE.matches;
+  if (overlay) {
+    el.panel.setAttribute('role', 'dialog');
+    el.panel.setAttribute('aria-modal', 'true');
+    el.panel.setAttribute('aria-labelledby', 'sidepanelTitle');
+  } else {
+    for (const a of ['role', 'aria-modal', 'aria-labelledby']) el.panel.removeAttribute(a);
+  }
+  el.panel.inert = overlay ? !panelOpen() : panelCollapsed();
+  el.menuBtn.setAttribute('aria-expanded', String(overlay ? panelOpen() : !panelCollapsed()));
+}
+
 function openDrawer() {
-  document.body.classList.add('filters-open');
+  document.body.classList.add('panel-open');
   el.scrim.classList.remove('hidden');
-  el.filtersBtn.setAttribute('aria-expanded', 'true');
-  (el.filtersBody.querySelector('button, input') || $('#filtersClose')).focus();
+  syncPanelMode();
+  // focus into the drawer: the current page's item (where the user is), else the first one
+  (el.panel.querySelector('.sp-item[aria-current="page"]') || focusables(el.panel)[0]).focus();
 }
-function closeDrawer() {
-  if (!document.body.classList.contains('filters-open')) return;
-  document.body.classList.remove('filters-open');
+
+/** Close the drawer; focus goes back to the menu button unless restoreFocus is false (or it was elsewhere). */
+function closeDrawer({ restoreFocus = true } = {}) {
+  if (!panelOpen()) return;
+  const hadFocus = el.panel.contains(document.activeElement) || document.activeElement === document.body;
+  document.body.classList.remove('panel-open');
   el.scrim.classList.add('hidden');
-  el.filtersBtn.setAttribute('aria-expanded', 'false');
+  syncPanelMode();
+  if (restoreFocus && hadFocus) el.menuBtn.focus();
 }
-function toggleFilters() {
+
+function toggleMenu() {
   if (WIDE.matches) {
-    const collapsed = document.documentElement.classList.toggle('filters-collapsed');
-    store.setPref('filtersCollapsed', collapsed);
-    el.filtersBtn.setAttribute('aria-expanded', String(!collapsed));
-  } else if (document.body.classList.contains('filters-open')) {
+    const collapsed = document.documentElement.classList.toggle('panel-collapsed');
+    store.set('prefs', withPanelCollapsed(store.prefs(), collapsed));
+    syncPanelMode();
+  } else if (panelOpen()) {
     closeDrawer();
-    el.filtersBtn.focus();
   } else {
     openDrawer();
   }
@@ -624,7 +746,10 @@ function exportResults(kind) {
 function setupUi() {
   initSort(el.sort, v => setState({ sort: v }));
   syncThemeUi();
-  el.filtersBtn.setAttribute('aria-expanded', String(WIDE.matches && !document.documentElement.classList.contains('filters-collapsed')));
+  // the stored preference decides (index.html applies the same rule before the first paint)
+  document.documentElement.classList.toggle('panel-collapsed', panelCollapsedPref(store.prefs()));
+  syncPanelMode();
+  $('#appVersion').textContent = ' · v' + APP_VERSION;
 
   // search box: debounce typing; Enter applies at once and moves to the results
   let t = null;
@@ -635,16 +760,54 @@ function setupUi() {
   el.q.addEventListener('keydown', e => {
     if (e.key === 'Enter') { clearTimeout(t); setState({ q: el.q.value.trim() }); }
     if (e.key === 'ArrowDown') { e.preventDefault(); clearTimeout(t); setState({ q: el.q.value.trim() }); list.focusFirst(); }
-    if (e.key === 'Escape' && el.q.value) { e.preventDefault(); e.stopPropagation(); el.q.value = ''; setState({ q: '' }); }
+    if (e.key === 'Escape' && el.q.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearTimeout(t);
+      el.q.value = '';
+      // on another view, clearing the box stays there (setState would open the list)
+      if (viewOf(app.route) === 'list') setState({ q: '' }); else keepState({ q: '' });
+    }
   });
 
-  el.themeBtn.addEventListener('click', () => setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark'));
+  // theme: the segmented Light / Dark / System in the panel and in Settings
+  document.addEventListener('click', e => {
+    const b = e.target.closest?.('[data-theme-pick]');
+    if (b) setTheme(b.dataset.themePick === 'system' ? null : b.dataset.themePick);
+  });
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', syncThemeUi);
-  el.filtersBtn.addEventListener('click', toggleFilters);
-  $('#filtersClose').addEventListener('click', () => { if (WIDE.matches) toggleFilters(); else { closeDrawer(); el.filtersBtn.focus(); } });
+
+  // side panel
+  el.menuBtn.addEventListener('click', toggleMenu);
+  $('#panelClose').addEventListener('click', () => closeDrawer());
   $('#filtersReset').addEventListener('click', () => setState({ ...defaultState(), sort: app.state.sort }));
-  el.scrim.addEventListener('click', closeDrawer);
-  WIDE.addEventListener('change', () => { closeDrawer(); el.filtersBtn.setAttribute('aria-expanded', String(WIDE.matches && !document.documentElement.classList.contains('filters-collapsed'))); });
+  el.showResults.addEventListener('click', () => {
+    closeDrawer({ restoreFocus: false });
+    list.focusFirst();
+    if (!el.list.contains(document.activeElement)) el.menuBtn.focus();
+  });
+  el.scrim.addEventListener('click', () => closeDrawer());
+  // choosing a page in the drawer closes it (filters do not: filtering is iterative)
+  el.panel.addEventListener('click', e => { if (e.target.closest('a[data-nav]') && !WIDE.matches) closeDrawer(); });
+  // the drawer keeps the focus while it is open: Tab cycles inside it, and focus that lands outside comes back
+  el.panel.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || !panelOpen()) return;
+    const items = focusables(el.panel);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !el.panel.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  document.addEventListener('focusin', e => {
+    if (!panelOpen() || el.panel.contains(e.target) || e.target.closest?.('dialog, .toasts')) return;
+    (focusables(el.panel)[0] || el.menuBtn).focus();
+  });
+  WIDE.addEventListener('change', () => {
+    const inPanel = el.panel.contains(document.activeElement);
+    closeDrawer({ restoreFocus: false });
+    syncPanelMode();
+    if (inPanel && el.panel.inert) el.menuBtn.focus(); // docked -> drawer: the panel is closed now
+  });
 
   $('#skipLink').addEventListener('click', e => { e.preventDefault(); list.focusFirst(); });
 
@@ -672,14 +835,23 @@ function setupUi() {
   // global keys
   document.addEventListener('keydown', e => {
     const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
-    if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); el.q.focus(); el.q.select(); return; }
+    if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (panelOpen()) closeDrawer({ restoreFocus: false }); // the search box is behind the drawer
+      el.q.focus();
+      el.q.select();
+      return;
+    }
     if (e.key === 'Escape' && !e.defaultPrevented) {
       if (document.querySelector('dialog[open]')) return; // the dialog closes itself
-      if (document.body.classList.contains('filters-open')) { closeDrawer(); el.filtersBtn.focus(); return; }
+      if (panelOpen()) { closeDrawer(); return; }
       if (app.route.name === 'detail') {
         const id = app.route.id;
         location.hash = backHref();
         setTimeout(() => list.focusCard(id), 0);
+      } else if (isSecondary(app.route) && !typing && !e.target.closest?.('[role="menu"], [role="dialog"]')) {
+        // the watchlist and the other views: Esc goes home, filters as they were
+        location.hash = homeHref(app.state);
       }
     }
   });
@@ -698,21 +870,26 @@ function setupUi() {
 
 // ---------- PWA ----------
 
+/** Show the browser's install prompt (the header's Install button, Settings). */
+async function promptInstall() {
+  const p = app.installPrompt;
+  if (!p) return;
+  p.prompt();
+  await p.userChoice.catch(() => null);
+  app.installPrompt = null;
+  el.installBtn.classList.add('hidden');
+  renderSettingsView();
+}
+
 function setupPwa() {
-  let installPrompt = null;
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
-    installPrompt = e;
+    app.installPrompt = e;
     el.installBtn.classList.remove('hidden');
+    renderSettingsView();
   });
-  el.installBtn.addEventListener('click', async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    await installPrompt.userChoice.catch(() => null);
-    installPrompt = null;
-    el.installBtn.classList.add('hidden');
-  });
-  window.addEventListener('appinstalled', () => { el.installBtn.classList.add('hidden'); toast('Installed'); });
+  el.installBtn.addEventListener('click', promptInstall);
+  window.addEventListener('appinstalled', () => { app.installPrompt = null; el.installBtn.classList.add('hidden'); toast('Installed'); renderSettingsView(); });
 
   // The desktop app has no service worker: its files are on disk and it keeps the data fresh itself (electron/).
   if (DESKTOP || !('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;

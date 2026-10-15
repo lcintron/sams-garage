@@ -48,7 +48,8 @@ const helpNodes = parts => parts.map(p => (Array.isArray(p) ? h('a', { href: p[1
 
 /**
  * @param {HTMLElement} view
- * @param {{catalog, descriptions, profiles, watchCount, reportLast: boolean, toast: Function}} o
+ * @param {{catalog, descriptions, profiles, watchCount, reportLast: boolean, toast: Function,
+ *           onManageProfiles: (onChange: (profiles) => void) => void}} o
  */
 export async function showNotifyView(view, o) {
   const first = !ui || ui.view !== view;
@@ -65,7 +66,7 @@ export async function showNotifyView(view, o) {
     try {
       Object.assign(ui, await page.load(), { editing: null, draft: null, preview: undefined });
     } catch (e) {
-      view.replaceChildren(h('div', { class: 'notify' }, h('h1', { text: 'Notifications' }),
+      view.replaceChildren(h('div', { class: 'notify' },
         h('p', { class: 'notice', text: 'Notification settings cannot be stored in this browser (' + e.message + '). Private windows often block it.' })));
       ui.settings = null;
       return;
@@ -150,8 +151,7 @@ function render() {
   if (!ui || !ui.settings) return;
   const s = ui.settings;
   const focusId = document.activeElement && ui.view.contains(document.activeElement) ? document.activeElement.id : null;
-  ui.view.replaceChildren(h('div', { class: 'notify' },
-    h('h1', { text: 'Notifications' }),
+  ui.view.replaceChildren(h('div', { class: 'notify' }, // the title is in the view's header (index.html)
     h('p', null, 'One report a day, and only when there is something to report: new topics that match your keywords, ',
       'changes to matching topics, and any change to the topics you starred. It goes to Slack, Discord, Microsoft Teams or WhatsApp. ',
       h('a', { href: README, target: '_blank', rel: 'noopener noreferrer', text: 'Setup guide' }), '.'),
@@ -218,7 +218,9 @@ function triggersSection(s) {
     h('div', { class: 'checks nf-profiles' }, profiles.map(p => h('label', { class: 'check' },
       h('input', { type: 'checkbox', checked: t.profiles.includes(p.id), onchange: e => trig({ profiles: e.target.checked ? [...t.profiles, p.id] : t.profiles.filter(x => x !== p.id) }) }),
       h('span', { class: 'lbl' }, h('span', { class: 'code', text: '#' + p.name }), ' ', h('span', { class: 'dim small', text: (p.preset ? 'preset · ' : 'yours · ') + p.terms.slice(0, 6).join(', ') + (p.terms.length > 6 ? '…' : '') }))))),
-    h('p', { class: 'small dim', text: 'Add your own profiles under Filters → Keyword profiles → Manage.' }),
+    // the profiles dialog (the one under Filters, which this view does not show); the list here follows its changes
+    h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Manage profiles…',
+      onclick: () => ui.o.onManageProfiles(list => { ui.o.profiles = list; render(); }) })),
     !t.keywords.length && !t.profiles.length ? h('p', { class: 'small warn-text', text: 'With no keywords or profiles, only starred topics are reported.' }) : null);
 }
 

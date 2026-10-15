@@ -89,7 +89,7 @@ Non-goals
     ├─ sw.js
     ├─ css/app.css
     ├─ js/                      ES modules, no bundler
-    │   ├─ app.js               boot, routing (#/, #/s/<id>, #/sql, #/about), SW registration, install prompt
+    │   ├─ app.js               boot, routing (js/nav.js), side panel, SW registration, install prompt
     │   ├─ data.js              fetch catalog/meta/index/records; caching; "new since last visit"
     │   ├─ search.js            MiniSearch load + query + filter/sort pipeline (pure, testable)
     │   ├─ filters.js           filter state ↔ URL query string
@@ -183,7 +183,7 @@ Build must be deterministic (sorted keys, sorted ids) so Pages deploys only diff
 
 ## 6. Frontend behaviour
 
-Shell: header (logo, search box, install button, data-freshness pill), left/collapsible filter panel, results list, detail pane (side-by-side ≥ 1024px, full-screen route on mobile). Routes via hash: `#/` list, `#/s/<id>` detail, `#/sql` console, `#/watch` watchlist, `#/about`.
+Shell: header (menu button, logo, search box, data-freshness pill, watchlist star, install button), a left side panel (navigation, the filters on the list, and a footer with the theme, Settings and About; docked and collapsible ≥ 1280px, a drawer below), results list, detail pane (side-by-side ≥ 1024px, full-screen route on mobile). Routes via hash: `#/` list, `#/s/<id>` detail, `#/sql` console, `#/watch` watchlist, `#/notify`, `#/settings`, `#/about`; each view other than the list has a back link to `#/` with the filters kept.
 
 Search & filters (all reflected in the URL so views are shareable)
 - Full-text (MiniSearch: prefix + fuzzy 0.2, field boosts title 3 / keywords 2 / topic_number 3).

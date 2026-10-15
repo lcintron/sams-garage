@@ -1,6 +1,6 @@
 /*
- * About view (#/about): what the app is, data freshness per source, counts, keyboard shortcuts, and device-local
- * settings (theme, clear local data).
+ * About view (#/about), informational only: what the app is, its version, data freshness per source, counts, links
+ * and the license. The device's settings (theme, clearing local data, shortcuts) are in Settings (ui/settings.js).
  */
 import { h, ago } from './dom.js';
 import { metaUpdated, metaVersion } from '../data.js';
@@ -10,7 +10,7 @@ const SOURCE_NAMES = { sbir_gov: 'SBIR.gov topics', dod_dsip: 'DoD SBIR/STTR (DS
 
 /**
  * @param {HTMLElement} view
- * @param {{ meta, appVersion, onTheme:(t)=>void, theme:string, onClearLocal:()=>void, catalogCount:number }} o
+ * @param {{ meta, appVersion: string, catalogCount: number }} o
  */
 export function renderAbout(view, o) {
   const m = o.meta;
@@ -18,12 +18,10 @@ export function renderAbout(view, o) {
   const counts = m?.counts || {};
   const t = metaUpdated(m);
 
-  const themeSel = h('select', { 'aria-label': 'Theme' },
-    [['system', 'Follow system'], ['dark', 'Dark'], ['light', 'Light']].map(([v, l]) => h('option', { value: v, text: l, selected: o.theme === v })));
-  themeSel.addEventListener('change', () => o.onTheme(themeSel.value));
-
   view.replaceChildren(h('div', { class: 'about' },
-    h('h1', { text: "SAM's Garage" }),
+    h('div', { class: 'about-app' },
+      h('img', { src: 'icons/icon.svg', alt: '', width: '40', height: '40' }),
+      h('div', null, h('h2', { text: "SAM's Garage" }), h('p', { class: 'dim', text: `Version ${o.appVersion}` }))),
     h('p', null, "SAM's Garage (Sg) puts every open and upcoming U.S. federal SBIR/STTR topic and solicitation in one searchable list: DoD, HHS/NIH, NSF, DOE, NASA, USDA, DHS, DOT, EPA, ED, DOC and more. ",
       'The data is scraped daily by a GitHub Action from SBIR.gov, the DoD SBIR/STTR portal (DSIP) and Grants.gov, stored in the git repository, and searched entirely in your browser. ',
       'Always confirm details in the official solicitation before you propose.'),
@@ -51,15 +49,10 @@ export function renderAbout(view, o) {
       h('li', null, 'Star topics to keep them on your ', h('a', { href: '#/watch', text: 'watchlist' }), '. Topics first seen since your last visit are marked NEW.'),
       h('li', null, 'Keyword profiles (#UAS, #Counter-UAS, #Acoustic, or your own) flag and rank matching topics.'),
       h('li', null, 'The ', h('a', { href: '#/sql', text: 'SQL console' }), ' runs read-only queries over the whole database in your browser.'),
-      h('li', null, 'Install it (header button or the browser menu) to use it like an app; the last data you loaded works offline. ',
+      h('li', null, 'Install it (the Install button, ', h('a', { href: '#/settings', text: 'Settings' }), ' or the browser menu) to use it like an app; the last data you loaded works offline. ',
         'Desktop apps for Windows, macOS and Linux are on the ', h('a', { href: 'https://github.com/lcintron/sams-garage/releases/latest', target: '_blank', rel: 'noopener noreferrer', text: 'releases page' }), '.'),
-      h('li', null, 'Keys: ', h('kbd', { text: '/' }), ' search, ', h('kbd', { text: '↑' }), h('kbd', { text: '↓' }), ' move through results, ',
-        h('kbd', { text: 'Enter' }), ' open, ', h('kbd', { text: 'Esc' }), ' close, ', h('kbd', { text: 'Ctrl' }), '+', h('kbd', { text: 'Enter' }), ' run SQL.')),
-
-    h('h2', { text: 'This device' }),
-    h('div', { class: 'row' }, h('label', null, 'Theme ', themeSel),
-      h('button', { class: 'btn small danger', type: 'button', text: 'Clear watchlist, profiles, saved searches and notification settings', onclick: o.onClearLocal })),
-    h('p', { class: 'small dim', text: 'Watchlist, saved searches, profiles, preferences and notification settings (with their webhooks and keys) are stored only on this device.' }),
+      h('li', null, 'Your watchlist, saved searches, profiles and settings stay on this device; the theme, keyboard shortcuts and clearing them are in ',
+        h('a', { href: '#/settings', text: 'Settings' }), '.')),
 
     h('h2', { text: 'Open source' }),
     h('p', null, 'MIT licensed; source on ', h('a', { href: 'https://github.com/lcintron/sams-garage', target: '_blank', rel: 'noopener noreferrer', text: 'GitHub' }), '. Bundled: ', h('a', { href: 'vendor/minisearch/LICENSE.txt', text: 'MiniSearch' }), ' (MIT) and ',

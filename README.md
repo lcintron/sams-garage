@@ -27,6 +27,8 @@ for now; it will move to sg.luiscintron.com once that custom domain is configure
 - **SQL console** (`#/sql`). Run read-only SQL against the whole database in your browser ([sql.js](https://sql.js.org/)), with example queries, a schema browser, and a download link for the `.sqlite` file.
 - **Export** the current results as CSV (opens cleanly in Excel) or JSON.
 - **Installable and offline.** The web app works offline on the last data it loaded and offers to reload when a new version ships. The desktop app always has data: today's from the live site, else the last copy it kept, else the snapshot in its installer.
+- **Navigation.** The menu button opens a side panel: Opportunities, Watchlist, Notifications and the SQL console, the filters (on the list), and at the bottom the theme (light, dark or system), **Settings** and **About** with the version. On a wide screen it stays open as a column, and the button folds it away; on smaller screens it slides over the page. Every other view has an **← Opportunities** link (or <kbd>Esc</kbd>) back to the list, with your filters as they were.
+- **Settings** (`#/settings`): the theme, installing the app, notifications, the keyboard shortcuts, and data and storage (freshness, the database download, and clearing what is stored on this device).
 - **Usability.** Dark and light themes, keyboard support (<kbd>/</kbd> to search, <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> to close), and layouts for phone through desktop.
 
 Informational only: always confirm dates and requirements in the official solicitation before you propose.
@@ -77,7 +79,7 @@ start at login with its window hidden (`--hidden`); see [Notifications](#notific
 ## Notifications
 
 SAM's Garage can send you **one report a day, and only when there is something to report**, to Slack, Discord,
-Microsoft Teams or WhatsApp. Set it up in the app under the bell icon (**Notifications**, `#/notify`).
+Microsoft Teams or WhatsApp. Set it up in the app: open the menu (☰) and choose **Notifications** (`#/notify`).
 
 A report has up to three parts, and you can switch each one off:
 
@@ -199,8 +201,8 @@ marked so that browsers and password managers do not offer to save them.
 keeps in the browser, webhooks included. The app warns about this when you add a channel there. Until it moves to its
 own domain, prefer the desktop app or GitHub Actions for webhooks and keys.
 
-Anyone who has a webhook URL can post to that channel, so treat the exported JSON like a password. **About → Clear
-watchlist, profiles, saved searches and notification settings** deletes all of it from the device. Reports go straight
+Anyone who has a webhook URL can post to that channel, so treat the exported JSON like a password. **Settings → Data
+and storage → Clear local data** deletes all of it from the device. Reports go straight
 from your device, or from GitHub Actions, to the platform you chose. No SAM's Garage server is involved.
 
 ## How the data stays fresh
@@ -327,7 +329,7 @@ up new icons with the next release, which bumps the service worker's version.
 
 ## Install as an app
 
-- **Desktop:** the [installers](https://github.com/lcintron/sams-garage/releases/latest), or **Install** in the header of the web app (Chrome, Edge).
+- **Desktop:** the [installers](https://github.com/lcintron/sams-garage/releases/latest), or **Install** in the header (or **Settings**) of the web app (Chrome, Edge).
 - **Android Chrome:** the menu, then **Add to Home screen** or **Install app**.
 - **iPhone or iPad Safari:** Share, then **Add to Home Screen**.
 

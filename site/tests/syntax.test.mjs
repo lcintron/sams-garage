@@ -17,7 +17,7 @@ const jsIn = (dir, deep) => (deep ? walk(path.join(root, dir)) : fs.readdirSync(
 const files = [...jsIn('site/js', true), path.join(root, 'site', 'sw.js'), ...jsIn('electron', false), ...jsIn('scripts', false)];
 
 test('the file list covers the app', () => {
-  for (const f of ['site/js/app.js', 'site/js/ui/about.js', 'site/js/ui/notify-view.js', 'site/js/notify/core.js', 'site/js/notify/idb.js',
+  for (const f of ['site/js/app.js', 'site/js/nav.js', 'site/js/ui/about.js', 'site/js/ui/settings.js', 'site/js/ui/notify-view.js', 'site/js/notify/core.js', 'site/js/notify/idb.js',
     'site/js/notify/runner.js', 'site/js/notify/page.js', 'site/sw.js', 'electron/main.js', 'electron/notify.js', 'electron/notify-store.js',
     'electron/notify-scheduler.js', 'electron/notify-core.js', 'scripts/release.js', 'scripts/notify.mjs']) {
     assert.ok(files.includes(path.join(root, f)), f);

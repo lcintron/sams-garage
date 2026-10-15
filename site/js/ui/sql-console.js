@@ -8,7 +8,7 @@ let state = null; // { db, schema } once loaded
 let loading = null;
 
 /**
- * @param {HTMLElement} view   #sqlView
+ * @param {HTMLElement} view   #sqlBody (the view's body, under its header)
  * @param {{ url: string, version: string }} opts
  */
 export async function showSqlConsole(view, opts) {
@@ -94,7 +94,7 @@ function build(view, sqlMod, opts) {
 
   view.replaceChildren(h('div', { class: 'sql' }, schemaEl,
     h('div', { class: 'sql-main' },
-      h('div', { class: 'sql-bar' }, h('h1', { class: 'list-title', text: 'SQL console' }), h('span', { class: 'grow' }), examples,
+      h('div', { class: 'sql-bar' }, examples, h('span', { class: 'grow' }),
         h('button', { class: 'btn small primary', type: 'button', title: 'Run (Ctrl+Enter)', text: 'Run ▸', onclick: run })),
       ta, msg, out)));
   run();

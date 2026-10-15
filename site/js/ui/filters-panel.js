@@ -7,7 +7,7 @@ import { h } from './dom.js';
 import { STATUSES, STATUS_LABELS, PROGRAMS, PHASES, CLOSING_WITHIN } from '../filters.js';
 
 /**
- * @param {HTMLElement} body  #filtersBody
+ * @param {HTMLElement} body  #filtersBody, in the side panel (index.html)
  * @param {{ onChange:(patch)=>void, onManageProfiles:()=>void, onSaveSearch:(name)=>void, onDeleteSearch:(name)=>void,
  *           searchHref:(query)=>string }} handlers
  */
@@ -32,7 +32,8 @@ export function createFiltersPanel(body, handlers) {
    */
   function render(s, c, ctx) {
     const focusKey = document.activeElement?.closest?.('#filtersBody [data-fkey]')?.dataset.fkey;
-    const scroll = body.scrollTop;
+    const scroller = body.closest('.sp-scroll') || body; // the side panel scrolls as a whole
+    const scroll = scroller.scrollTop;
 
     const status = section('Status', h('div', { class: 'chips' },
       STATUSES.map(st => chip('status-' + st, STATUS_LABELS[st], s.status.includes(st), c.status[st] || 0,
@@ -106,7 +107,7 @@ export function createFiltersPanel(body, handlers) {
           dataset: { fkey: 'del-' + x.name }, onclick: () => handlers.onDeleteSearch(x.name), text: '×' })))) : null);
 
     body.replaceChildren(status, profiles, closing, opens, agency, program, phase, fresh, saved);
-    body.scrollTop = scroll;
+    scroller.scrollTop = scroll;
     if (focusKey) body.querySelector(`[data-fkey="${CSS.escape(focusKey)}"]`)?.focus();
   }
 
