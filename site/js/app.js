@@ -37,7 +37,7 @@ import { createFiltersPanel } from './ui/filters-panel.js';
 import { initSort, renderCount, renderActiveChips, renderFreshness } from './ui/stats.js';
 import { openProfilesDialog } from './ui/profiles-dialog.js';
 
-const APP_VERSION = '0.4.0'; // app version; bump via scripts/release.js
+const APP_VERSION = '0.4.1'; // app version; bump via scripts/release.js
 // The notification code loads after the first paint (startNotifications), or at once when #/notify is opened first.
 let notifyP = null;
 const loadNotify = () => (notifyP = notifyP || import('./notify/page.js'));
