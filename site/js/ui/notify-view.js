@@ -48,7 +48,8 @@ const helpNodes = parts => parts.map(p => (Array.isArray(p) ? h('a', { href: p[1
 
 /**
  * @param {HTMLElement} view
- * @param {{catalog, descriptions, profiles, watchCount, reportLast: boolean, toast: Function}} o
+ * @param {{catalog, descriptions, profiles, watchCount, reportLast: boolean, toast: Function,
+ *           onManageProfiles: (onChange: (profiles) => void) => void}} o
  */
 export async function showNotifyView(view, o) {
   const first = !ui || ui.view !== view;
@@ -217,7 +218,9 @@ function triggersSection(s) {
     h('div', { class: 'checks nf-profiles' }, profiles.map(p => h('label', { class: 'check' },
       h('input', { type: 'checkbox', checked: t.profiles.includes(p.id), onchange: e => trig({ profiles: e.target.checked ? [...t.profiles, p.id] : t.profiles.filter(x => x !== p.id) }) }),
       h('span', { class: 'lbl' }, h('span', { class: 'code', text: '#' + p.name }), ' ', h('span', { class: 'dim small', text: (p.preset ? 'preset · ' : 'yours · ') + p.terms.slice(0, 6).join(', ') + (p.terms.length > 6 ? '…' : '') }))))),
-    h('p', { class: 'small dim', text: 'Add your own profiles under Filters → Keyword profiles → Manage.' }),
+    // the profiles dialog (the one under Filters, which this view does not show); the list here follows its changes
+    h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Manage profiles…',
+      onclick: () => ui.o.onManageProfiles(list => { ui.o.profiles = list; render(); }) })),
     !t.keywords.length && !t.profiles.length ? h('p', { class: 'small warn-text', text: 'With no keywords or profiles, only starred topics are reported.' }) : null);
 }
 

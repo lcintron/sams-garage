@@ -122,6 +122,12 @@ function setState(patch, { keepScroll = false } = {}) {
   refresh({ keepScroll });
 }
 
+/** A state change on a view other than the list: kept for the way back (the back links), without leaving the view. */
+function keepState(patch) {
+  app.state = parseQuery(toQuery({ ...app.state, ...patch }));
+  syncNav();
+}
+
 /** Where a detail's Back (and Esc) goes: the list it was opened from. */
 function backHref() { return app.listMode === 'watch' ? watchHref(app.state) : homeHref(app.state); }
 
@@ -432,7 +438,8 @@ function renderNotifyView(reportLast) {
     profiles: app.profiles,
     watchCount: app.loaded ? app.catalog.reduce((k, r) => k + (store.isWatched(r.id) ? 1 : 0), 0) : store.watchlist().size,
     reportLast,
-    toast
+    toast,
+    onManageProfiles: onChange => openProfilesDialog(store.userProfiles(), list => { saveUserProfiles(list); onChange(app.profiles); })
   })).catch(err => {
     el.views.notify.body.replaceChildren(h('div', { class: 'about' }, h('p', { text: 'The notifications view could not load: ' + err.message })));
   });
@@ -624,7 +631,10 @@ function saveUserProfiles(list) {
   app.profiles = allProfiles(list);
   recomputeProfileScores();
   const ids = new Set(app.profiles.map(p => p.id));
-  if (app.state.profile.some(id => !ids.has(id))) setState({ profile: app.state.profile.filter(id => ids.has(id)) });
+  const gone = app.state.profile.some(id => !ids.has(id));
+  const patch = { profile: app.state.profile.filter(id => ids.has(id)) };
+  if (gone && viewOf(app.route) !== 'list') keepState(patch); // the dialog was opened from Notifications: stay there
+  else if (gone) setState(patch);
   else refresh({ keepScroll: true });
 }
 
@@ -756,8 +766,7 @@ function setupUi() {
       clearTimeout(t);
       el.q.value = '';
       // on another view, clearing the box stays there (setState would open the list)
-      if (viewOf(app.route) === 'list') setState({ q: '' });
-      else { app.state = { ...app.state, q: '' }; syncNav(); }
+      if (viewOf(app.route) === 'list') setState({ q: '' }); else keepState({ q: '' });
     }
   });
 
