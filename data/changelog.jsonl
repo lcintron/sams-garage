@@ -675,3 +675,4 @@
 {"at":"2026-10-10T14:30:53Z","id":"sbirgov:13020","event":"updated","from":"87c5d8711c12af766251b008036405fed3258d25","to":"faaf86f92aa86343854986d35a85e7128ecec489","fields":["qa_open_date","qa_close_date","description","keywords"]}
 {"at":"2026-10-10T14:30:53Z","id":"sbirgov:13022","event":"updated","from":"7ef0ca358f8c63f74e2b31270cf66a79cc218c8b","to":"5fefb83345fceb7209104f420591755de2de6f6b","fields":["qa_open_date","qa_close_date","description","keywords"]}
 {"at":"2026-10-11T12:50:26Z","id":"sbirgov:13020","event":"missing","from":"pre_release","to":null}
+{"at":"2026-10-16T11:24:48Z","id":"dsip:ARM27BX01-DP001","event":"updated","from":"a56e2d11ec8afca57134a47be38f5d68b19ee3b3","to":"4b26580d17814565359c98d9ee7b5fdda9cf1ed1","fields":["description"]}
