@@ -676,3 +676,6 @@
 {"at":"2026-10-10T14:30:53Z","id":"sbirgov:13022","event":"updated","from":"7ef0ca358f8c63f74e2b31270cf66a79cc218c8b","to":"5fefb83345fceb7209104f420591755de2de6f6b","fields":["qa_open_date","qa_close_date","description","keywords"]}
 {"at":"2026-10-11T12:50:26Z","id":"sbirgov:13020","event":"missing","from":"pre_release","to":null}
 {"at":"2026-10-16T11:24:48Z","id":"dsip:ARM27BX01-DP001","event":"updated","from":"a56e2d11ec8afca57134a47be38f5d68b19ee3b3","to":"4b26580d17814565359c98d9ee7b5fdda9cf1ed1","fields":["description"]}
+{"at":"2026-10-21T11:49:21Z","id":"dsip:ARM26BX03-DP007","event":"updated","from":"93f822824c83dd338a28e04d5985d26e36afc08e","to":"abba4551d3e9e86ebcae69d7404778e1e829a917","fields":["open_date","close_date"]}
+{"at":"2026-10-21T11:49:21Z","id":"dsip:ARM26BX04-DV010","event":"updated","from":"031d41784a56adf052379d0fe86668d6b9424637","to":"b8d1ae3e6fe0ed763dfca6017ab70006cc61a2cc","fields":["open_date","close_date"]}
+{"at":"2026-10-21T11:49:21Z","id":"dsip:DPA26BZ06-DV028","event":"updated","from":"a16d40b17e0df6963a348e5da73fc5ab9771539b","to":"4783c182a167d77228f54e13744e25f7b516f6db","fields":["close_date"]}
