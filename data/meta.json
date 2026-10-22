@@ -2,6 +2,7 @@
   "counts": {
     "by_agency": {
       "DOD": 73,
+      "DOE": 1,
       "EPA": 4,
       "HHS": 18,
       "NSF": 268,
@@ -9,36 +10,36 @@
     },
     "by_status": {
       "forecasted": 7,
-      "open": 328,
+      "open": 329,
       "pre_release": 29
     },
-    "total": 364
+    "total": 365
   },
-  "last_run": "2026-10-21T11:49:21Z",
+  "last_run": "2026-10-22T11:52:59Z",
   "last_run_events": {
     "missing": 0,
-    "new": 0,
+    "new": 1,
     "status": 0,
-    "updated": 3
+    "updated": 0
   },
   "sources": {
     "dod_dsip": {
-      "complete": true,
-      "error": null,
+      "complete": false,
+      "error": "GET https://www.dodsbirsttr.mil/topics/api/public/topics/search?searchParam=%7B%22searchText%22%3Anull%2C%22components%22%3Anull%2C%22programYear%22%3Anull%2C%22solicitationCycleNames%22%3Anull%2C%22releaseNumbers%22%3A%5B%5D%2C%22topicReleaseStatus%22%3A%5B591%2C592%5D%2C%22modernizationPriorities%22%3A%5B%5D%2C%22sortBy%22%3A%22finalTopicCode%2Casc%22%2C%22technologyAreaIds%22%3A%5B%5D%2C%22component%22%3Anull%2C%22program%22%3Anull%7D&size=100&page=0 failed after 1 attempt(s): HTTP 403",
       "failed": 0,
-      "fetched": 71,
-      "ok": true,
-      "ran_at": "2026-10-21T11:51:18Z",
+      "fetched": 0,
+      "ok": false,
+      "ran_at": "2026-10-22T11:55:00Z",
       "records": 71
     },
     "grants_gov": {
       "complete": true,
       "error": null,
       "failed": 0,
-      "fetched": 12,
+      "fetched": 13,
       "ok": true,
-      "ran_at": "2026-10-21T11:51:33Z",
-      "records": 12
+      "ran_at": "2026-10-22T11:55:00Z",
+      "records": 13
     },
     "sbir_gov": {
       "complete": true,
@@ -46,7 +47,7 @@
       "failed": 0,
       "fetched": 306,
       "ok": true,
-      "ran_at": "2026-10-21T11:49:21Z",
+      "ran_at": "2026-10-22T11:52:59Z",
       "records": 306
     }
   }
