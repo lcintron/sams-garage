@@ -16,7 +16,7 @@
     },
     "total": 365
   },
-  "last_run": "2026-10-25T11:29:36Z",
+  "last_run": "2026-10-26T13:02:54Z",
   "last_run_events": {
     "missing": 0,
     "new": 0,
@@ -25,12 +25,12 @@
   },
   "sources": {
     "dod_dsip": {
-      "complete": false,
-      "error": "GET https://www.dodsbirsttr.mil/topics/api/public/topics/search?searchParam=%7B%22searchText%22%3Anull%2C%22components%22%3Anull%2C%22programYear%22%3Anull%2C%22solicitationCycleNames%22%3Anull%2C%22releaseNumbers%22%3A%5B%5D%2C%22topicReleaseStatus%22%3A%5B591%2C592%5D%2C%22modernizationPriorities%22%3A%5B%5D%2C%22sortBy%22%3A%22finalTopicCode%2Casc%22%2C%22technologyAreaIds%22%3A%5B%5D%2C%22component%22%3Anull%2C%22program%22%3Anull%7D&size=100&page=0 failed after 3 attempt(s): HTTP 503",
+      "complete": true,
+      "error": null,
       "failed": 0,
-      "fetched": 0,
-      "ok": false,
-      "ran_at": "2026-10-25T11:31:24Z",
+      "fetched": 28,
+      "ok": true,
+      "ran_at": "2026-10-26T13:04:55Z",
       "records": 28
     },
     "grants_gov": {
@@ -39,7 +39,7 @@
       "failed": 0,
       "fetched": 13,
       "ok": true,
-      "ran_at": "2026-10-25T11:31:34Z",
+      "ran_at": "2026-10-26T13:05:02Z",
       "records": 13
     },
     "sbir_gov": {
@@ -48,7 +48,7 @@
       "failed": 0,
       "fetched": 306,
       "ok": true,
-      "ran_at": "2026-10-25T11:29:36Z",
+      "ran_at": "2026-10-26T13:02:54Z",
       "records": 306
     }
   }
