@@ -11,16 +11,16 @@
     "by_status": {
       "closed": 43,
       "forecasted": 7,
-      "open": 286,
-      "pre_release": 29
+      "open": 309,
+      "pre_release": 6
     },
     "total": 365
   },
-  "last_run": "2026-10-27T12:11:53Z",
+  "last_run": "2026-10-28T12:54:52Z",
   "last_run_events": {
     "missing": 0,
     "new": 0,
-    "status": 0,
+    "status": 23,
     "updated": 0
   },
   "sources": {
@@ -30,7 +30,7 @@
       "failed": 0,
       "fetched": 28,
       "ok": true,
-      "ran_at": "2026-10-27T12:14:35Z",
+      "ran_at": "2026-10-28T12:56:34Z",
       "records": 28
     },
     "grants_gov": {
@@ -39,16 +39,16 @@
       "failed": 0,
       "fetched": 13,
       "ok": true,
-      "ran_at": "2026-10-27T12:14:41Z",
+      "ran_at": "2026-10-28T12:56:41Z",
       "records": 13
     },
     "sbir_gov": {
-      "complete": false,
+      "complete": true,
       "error": null,
       "failed": 0,
-      "fetched": 301,
+      "fetched": 306,
       "ok": true,
-      "ran_at": "2026-10-27T12:11:53Z",
+      "ran_at": "2026-10-28T12:54:52Z",
       "records": 306
     }
   }
