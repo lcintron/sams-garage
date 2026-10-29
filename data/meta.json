@@ -16,11 +16,11 @@
     },
     "total": 365
   },
-  "last_run": "2026-10-28T12:54:52Z",
+  "last_run": "2026-10-29T13:01:20Z",
   "last_run_events": {
     "missing": 0,
     "new": 0,
-    "status": 23,
+    "status": 0,
     "updated": 0
   },
   "sources": {
@@ -30,7 +30,7 @@
       "failed": 0,
       "fetched": 28,
       "ok": true,
-      "ran_at": "2026-10-28T12:56:34Z",
+      "ran_at": "2026-10-29T13:02:25Z",
       "records": 28
     },
     "grants_gov": {
@@ -39,16 +39,16 @@
       "failed": 0,
       "fetched": 13,
       "ok": true,
-      "ran_at": "2026-10-28T12:56:41Z",
+      "ran_at": "2026-10-29T13:02:32Z",
       "records": 13
     },
     "sbir_gov": {
-      "complete": true,
-      "error": null,
+      "complete": false,
+      "error": "GET https://www.sbir.gov/topics?status=Open&page=0 failed after 3 attempt(s): HTTP 502",
       "failed": 0,
-      "fetched": 306,
-      "ok": true,
-      "ran_at": "2026-10-28T12:54:52Z",
+      "fetched": 0,
+      "ok": false,
+      "ran_at": "2026-10-29T13:01:20Z",
       "records": 306
     }
   }
