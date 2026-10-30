@@ -746,3 +746,4 @@
 {"at":"2026-10-28T12:54:52Z","id":"dsip:OSW27BZ01-DV002","event":"status","from":"pre_release","to":"open"}
 {"at":"2026-10-28T12:54:52Z","id":"dsip:OSW27BZ01-NV001","event":"status","from":"pre_release","to":"open"}
 {"at":"2026-10-28T12:54:52Z","id":"sbirgov:13022","event":"status","from":"pre_release","to":"open"}
+{"at":"2026-10-30T12:55:46Z","id":"dsip:ARM27BX01-DP001","event":"updated","from":"4b26580d17814565359c98d9ee7b5fdda9cf1ed1","to":"104aba4bd82b6f09c544714d141db3f7610e485e","fields":["description"]}
