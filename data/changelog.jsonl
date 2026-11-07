@@ -1093,3 +1093,4 @@
 {"at":"2026-11-06T14:16:56Z","id":"sbirgov:13064","event":"new","from":null,"to":"open"}
 {"at":"2026-11-06T14:16:56Z","id":"sbirgov:13161","event":"new","from":null,"to":"pre_release"}
 {"at":"2026-11-06T14:16:56Z","id":"sbirgov:13163","event":"new","from":null,"to":"pre_release"}
+{"at":"2026-11-07T13:00:16Z","id":"sbirgov:13022","event":"missing","from":"open","to":null}
