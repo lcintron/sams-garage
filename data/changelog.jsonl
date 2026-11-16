@@ -1138,3 +1138,4 @@
 {"at":"2026-11-14T13:31:29Z","id":"sbirgov:1012343","event":"updated","from":"e8a8347ec9e36c5693548f0fbdf78d164da7af14","to":"fdb2ff5702641004a464f2abd4efa457b9b1ba5e","fields":["description"]}
 {"at":"2026-11-14T13:31:29Z","id":"sbirgov:1012344","event":"updated","from":"4eb5a00d08f169b8c319e027e6db488d9eca981a","to":"fe6dff87df0f23c23806dfa9eafbbe18046eef9d","fields":["description"]}
 {"at":"2026-11-14T13:31:29Z","id":"sbirgov:1012345","event":"updated","from":"10f8800422c7e95c8425dcbea0c7e063da78addd","to":"4e71f711c7f7557e37345147b380fcbe4fa02ff8","fields":["description"]}
+{"at":"2026-11-16T15:47:03Z","id":"dsip:ARM26BX04-DV010","event":"status","from":"pre_release","to":"open"}
