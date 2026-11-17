@@ -2,7 +2,7 @@
   "counts": {
     "by_agency": {
       "DOD": 158,
-      "DOE": 1,
+      "DOE": 26,
       "EPA": 4,
       "HHS": 18,
       "NSF": 268,
@@ -11,16 +11,16 @@
     "by_status": {
       "closed": 47,
       "forecasted": 7,
-      "open": 316,
+      "open": 341,
       "pre_release": 90
     },
-    "total": 460
+    "total": 485
   },
-  "last_run": "2026-11-16T15:47:03Z",
+  "last_run": "2026-11-17T15:59:34Z",
   "last_run_events": {
-    "missing": 0,
-    "new": 0,
-    "status": 1,
+    "missing": 10,
+    "new": 25,
+    "status": 0,
     "updated": 0
   },
   "sources": {
@@ -30,7 +30,7 @@
       "failed": 0,
       "fetched": 110,
       "ok": true,
-      "ran_at": "2026-11-16T15:49:33Z",
+      "ran_at": "2026-11-17T16:02:05Z",
       "records": 110
     },
     "grants_gov": {
@@ -39,17 +39,17 @@
       "failed": 0,
       "fetched": 13,
       "ok": true,
-      "ran_at": "2026-11-16T15:49:58Z",
+      "ran_at": "2026-11-17T16:02:33Z",
       "records": 13
     },
     "sbir_gov": {
       "complete": true,
       "error": null,
       "failed": 0,
-      "fetched": 371,
+      "fetched": 386,
       "ok": true,
-      "ran_at": "2026-11-16T15:47:03Z",
-      "records": 371
+      "ran_at": "2026-11-17T15:59:34Z",
+      "records": 386
     }
   }
 }
