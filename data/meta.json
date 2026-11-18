@@ -9,18 +9,18 @@
       "USDA": 11
     },
     "by_status": {
-      "closed": 47,
+      "closed": 58,
       "forecasted": 7,
-      "open": 341,
+      "open": 330,
       "pre_release": 90
     },
     "total": 485
   },
-  "last_run": "2026-11-17T15:59:34Z",
+  "last_run": "2026-11-18T15:39:33Z",
   "last_run_events": {
-    "missing": 10,
-    "new": 25,
-    "status": 0,
+    "missing": 0,
+    "new": 0,
+    "status": 11,
     "updated": 0
   },
   "sources": {
@@ -30,17 +30,17 @@
       "failed": 0,
       "fetched": 110,
       "ok": true,
-      "ran_at": "2026-11-17T16:02:05Z",
+      "ran_at": "2026-11-18T15:42:22Z",
       "records": 110
     },
     "grants_gov": {
       "complete": true,
       "error": null,
       "failed": 0,
-      "fetched": 13,
+      "fetched": 12,
       "ok": true,
-      "ran_at": "2026-11-17T16:02:33Z",
-      "records": 13
+      "ran_at": "2026-11-18T15:42:46Z",
+      "records": 12
     },
     "sbir_gov": {
       "complete": true,
@@ -48,7 +48,7 @@
       "failed": 0,
       "fetched": 386,
       "ok": true,
-      "ran_at": "2026-11-17T15:59:34Z",
+      "ran_at": "2026-11-18T15:39:33Z",
       "records": 386
     }
   }
