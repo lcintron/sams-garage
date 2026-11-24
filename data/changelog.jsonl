@@ -1187,3 +1187,13 @@
 {"at":"2026-11-18T15:39:33Z","id":"sbirgov:13064","event":"status","from":"open","to":"closed"}
 {"at":"2026-11-21T14:39:13Z","id":"dsip:ARM26BX03-DP007","event":"status","from":"pre_release","to":"open"}
 {"at":"2026-11-21T14:39:13Z","id":"grants:364135","event":"status","from":"open","to":"closed"}
+{"at":"2026-11-24T17:45:01Z","id":"dsip:ARM26BX04-DV010","event":"updated","from":"b64a3e39c5de2d46c988d4104272502847061ebe","to":"875555abcb9923b6ab04a25bece8372d002590f5","fields":["close_date"]}
+{"at":"2026-11-24T17:45:01Z","id":"dsip:DPA27BZ02-DV001","event":"updated","from":"a716d2741ac77ea737a00bc611264be9b4e28348","to":"fd1a17fa77a66b04f89f2c58fc4a6b59f84676ae","fields":["title"]}
+{"at":"2026-11-24T17:45:01Z","id":"dsip:DPA27BZ02-DV003","event":"updated","from":"52fd7bcfaa89bac8145b6e20c7bd2d92fea088af","to":"89e1bff2d586c66aa4428850273aea56f3319a88","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012450","event":"updated","from":"8e6a795d634232afbc62bf6da04092dee0f53c0a","to":"90bf4e0c09bd7af8fd57c9d127ea2376cc50e47b","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012451","event":"updated","from":"8302dd5871eefb5d208a0a07fd167fc6afd5c280","to":"afe1982e56d8e348831f9bedf9e72b5dffb4a642","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012452","event":"updated","from":"ea0868b403e8dd563575318b0998d9ddd81e6b72","to":"13fb571b7bcc086db275a526ec05e26023ed588c","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012453","event":"updated","from":"57e1c940ff33f238f85d868211a0fd19dd678d1d","to":"dc2efb68f69333e50bf051c52b528e87736aec1a","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012454","event":"updated","from":"079901dd52259e4b5a1cf4919d04118df3b63db6","to":"d743d1fe6cb9936666d9bbbbce1dca86aaf35b0f","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012455","event":"updated","from":"042ccccad08d35315d1bb224a9adea0d4ba6707c","to":"58411cd7430d6ac7d69a9eadb15e218f217ce4b5","fields":["description"]}
+{"at":"2026-11-24T17:45:01Z","id":"sbirgov:1012456","event":"updated","from":"1e74ba7b8ea3518d0ab9d2e187105364649c7b33","to":"32dd37c8ebfbc40a8ba954c466f296095876f3db","fields":["description"]}
