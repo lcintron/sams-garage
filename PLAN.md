@@ -224,8 +224,10 @@ jobs:
   scrape:  checkout (fetch-depth 1) → setup-python 3.12 (pip cache) → pip install → python -m scraper scrape --all
            → git config bot identity → git add data → commit "data: refresh YYYY-MM-DD (N open, M new)" if changed → git push
            → outputs.changed
-  build-deploy: needs scrape; always() && scrape didn't fail; checkout ref main (after push) → setup-python → python -m scraper build --out site/data
-           → configure-pages → upload-pages-artifact (path: site) → deploy-pages
+  build-site: needs scrape; always() && scrape didn't fail; checkout the pushed commit → setup-python → scripts/assemble-site.sh
+           → configure-pages → upload-pages-artifact (path: _site)
+  deploy:     needs build-site; environment github-pages; wait 15 s → deploy-pages (its own job: GitHub can take a few
+              seconds to list a just-uploaded artifact, actions/deploy-pages#451; the same split is in pages.yml and release.yml)
 ```
 - The scrape step must exit 0 when one source fails but others succeed (record the failure in meta.json and a `::warning::`); exit non-zero only when all sources fail.
 - Never fail the deploy because nothing changed; still redeploy so `meta.json` build time is fresh (cheap).
@@ -399,7 +401,7 @@ Secrets never go in the app's own URLs or in logs. `redactRequest` and the dry r
 - **Checks:** `--notify-dry-run` prints each channel's report and redacted request without sending. `--notify-check` runs one scheduled check. `--notify-file=<path>` and `SG_LIVE_BASE` are for local testing only.
 
 ### 11.7 GitHub Actions
-In `scrape.yml`, a job `notify` that `needs: [scrape, build-deploy]`, so the report's links open on the deployed data.
+In `scrape.yml`, a job `notify` that `needs: [scrape, deploy]`, so the report's links open on the deployed data.
 It checks out the pushed sha, sets up Node 22 with `setup-node@v7`, and runs `node scripts/notify.mjs` with
 `SG_NOTIFY_CONFIG` from the secret. It has `contents: read` only.
 
