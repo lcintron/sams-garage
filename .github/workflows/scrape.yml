@@ -102,22 +102,15 @@ jobs:
         if: always()
         run: python -m scraper status >> "$GITHUB_STEP_SUMMARY" || true
 
-  build-deploy:
-    name: Deploy Pages (latest release + today's data)
+  build-site:
+    name: Build the site (latest release + today's data)
     needs: scrape
     if: always() && needs.scrape.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      pages: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -136,6 +129,28 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+
+  deploy:
+    name: Deploy Pages
+    needs: build-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Wait until the artifact can be found
+        # Since late November 2026 GitHub can take a few seconds to list an artifact that was just uploaded, and
+        # deploy-pages looks it up only once (actions/deploy-pages#451). Deploying from a job of its own already
+        # leaves a gap after the upload; this wait covers the rest. If a deploy still fails, "Re-run failed jobs"
+        # is safe: it re-runs only this job, so no second github-pages artifact is uploaded.
+        run: sleep 15
       - id: deployment
         uses: actions/deploy-pages@v5
 
@@ -143,7 +158,7 @@ jobs:
     name: Send the notification report
     # After the deploy, so the links in the report open on this data. Runs when the scrape succeeded, for the daily
     # schedule or a manual run with "notify" ticked; a deploy that failed does not hold the report back.
-    needs: [scrape, build-deploy]
+    needs: [scrape, deploy]
     if: >-
       always() && needs.scrape.result == 'success' &&
       (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.notify))

@@ -26,17 +26,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy ${{ inputs.ref || 'the latest release' }}
+  build-site:
+    name: Build ${{ inputs.ref || 'the latest release' }} with today's data
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      pages: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,5 +66,27 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+
+  deploy:
+    name: Deploy ${{ inputs.ref || 'the latest release' }}
+    needs: build-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Wait until the artifact can be found
+        # Since late November 2026 GitHub can take a few seconds to list an artifact that was just uploaded, and
+        # deploy-pages looks it up only once (actions/deploy-pages#451). Deploying from a job of its own already
+        # leaves a gap after the upload; this wait covers the rest. If a deploy still fails, "Re-run failed jobs"
+        # is safe: it re-runs only this job, so no second github-pages artifact is uploaded.
+        run: sleep 15
       - id: deployment
         uses: actions/deploy-pages@v5
