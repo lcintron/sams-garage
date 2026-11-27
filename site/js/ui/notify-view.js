@@ -17,7 +17,7 @@ const KINDS = [
   { type: 'whatsapp', provider: 'callmebot', label: 'WhatsApp (CallMeBot)' },
   { type: 'whatsapp', provider: 'cloud', label: 'WhatsApp (Cloud API)' }
 ];
-const README = 'https://github.com/lcintron/sams-garage#notifications';
+const README = 'https://github.com/lcintron/sams-garage/blob/main/docs/notifications.md';
 const LABELS = {
   url: 'Webhook URL', phone: 'Your WhatsApp number, with country code', apikey: 'CallMeBot API key',
   phoneNumberId: 'Phone number ID', accessToken: 'Access token', to: 'Send to (number with country code)',

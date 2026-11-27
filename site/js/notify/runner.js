@@ -2,7 +2,7 @@
  * The browser's report run, shared by the service worker (Periodic Background Sync) and the page (on load and when it
  * becomes visible): read the settings and run state from IndexedDB, take the shared lock, fetch the live data, send
  * to the channels a browser can reach, show the device notification, store the new state. Best effort: a browser
- * runs this only while it runs (README "Notifications").
+ * runs this only while it runs (docs/notifications.md).
  *
  * A classic script (globalThis.SgNotifyRunner), loaded after core.js; the page imports it for its side effect and
  * sw.js with importScripts. Everything it touches comes in through `env`, so the tests run it with fakes.
