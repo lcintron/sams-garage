@@ -55,7 +55,9 @@ Non-goals
 ```
 /
 ├─ PLAN.md                      this file
-├─ README.md                    user-facing: what it is, run locally, deploy, data model (frontend agent owns; links to scraper/README.md)
+├─ README.md                    user-facing: what it is, usage, sources and updates, how to start contributing
+├─ CONTRIBUTING.md              developer detail: layout, local dev, desktop build, deploys, releases, icons
+├─ docs/notifications.md        the notification setup guide (linked from the app)
 ├─ LICENSE                      MIT, "Luis Cintron"
 ├─ .gitignore                   site/data/, __pycache__, .venv, node_modules, dist, .pytest_cache
 ├─ requirements.txt             requests, beautifulsoup4, (pytest in requirements-dev.txt)
@@ -232,7 +234,7 @@ jobs:
 - The scrape step must exit 0 when one source fails but others succeed (record the failure in meta.json and a `::warning::`); exit non-zero only when all sources fail.
 - Never fail the deploy because nothing changed; still redeploy so `meta.json` build time is fresh (cheap).
 
-`pages.yml`: workflow_dispatch only (optional `ref`, default the latest release tag). Since the SAM's Garage rename every deploy runs `scripts/assemble-site.sh`: the latest release's code with the newest data (see README "How the data stays fresh"); `release.yml` cuts releases (README "Releases").
+`pages.yml`: workflow_dispatch only (optional `ref`, default the latest release tag). Since the SAM's Garage rename every deploy runs `scripts/assemble-site.sh`: the latest release's code with the newest data (see CONTRIBUTING.md "Data pipeline and deploys"); `release.yml` cuts releases (CONTRIBUTING.md "Commits and releases").
 
 `ci.yml`: on push/PR → `pip install -r requirements-dev.txt && pytest -q`, `node --test site/tests`, and `python -m scraper build --out /tmp/site-data` from the committed data (smoke).
 
@@ -261,7 +263,7 @@ npm scripts: `serve` (node serve.js 8091), `build` (python -m scraper build), `s
 - Data: `python -m scraper validate` passes; `data/*.jsonl` sorted by id; re-running scrape with unchanged inputs produces no diff.
 - Site: no bundler, no framework, vendored libs pinned with licenses; works from `file:` off? (no — from `node serve.js`), works on mobile widths; Lighthouse PWA installable; offline reload shows last data; filters ↔ URL round-trip; SQL console rejects writes; CSV export escapes properly; no console errors.
 - Workflows: least-privilege permissions, pinned major versions of actions, inputs only via env vars, concurrency groups, bot commit identity, never fails on "nothing to commit".
-- Docs: README explains run-locally in ≤ 6 commands, how the daily refresh works, how to add a source, the schema.
+- Docs: README explains the app, its sources and updates, and how to start contributing; CONTRIBUTING.md and scraper/README.md hold the developer detail (the daily refresh, releases, the schema, adding a source).
 
 ---
 
@@ -280,7 +282,7 @@ Neither agent commits. Fable commits once the review passes; the user pushes aft
 
 Users connect channels (Slack, Discord, Microsoft Teams, WhatsApp) and choose keywords, hashtags and keyword profiles.
 Each channel gets **at most one report per local calendar day, and only when there is something to report**. User
-documentation: README "Notifications".
+documentation: docs/notifications.md.
 
 ### 11.1 What a report holds
 Three triggers, each can be switched off:
